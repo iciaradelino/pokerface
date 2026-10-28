@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pokerface – Gesture Prototype</title>
+  <style>
+    :root {
+      --felt: #0f3d2e;
+      --felt-dark: #0a2a20;
+      --panel: #11241d;
+      --text: #e8efe9;
+      --muted: #9bb3a6;
+      --accent: #f2c14e;
+      --good: #4fd18b;
+      --bad: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--felt-dark);
+      color: var(--text);
+    }
+    header {
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid #1f4436;
+    }
+    header h1 { font-size: 18px; margin: 0; }
+    header .status { color: var(--muted); font-size: 14px; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      padding: 16px 20px;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+    .stage {
+      position: relative;
+      background: var(--felt);
+      border-radius: 16px;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+    }
+    .stage video { display: none; }
+    .stage canvas { width: 100%; height: 100%; display: block; }
+    .banner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 64px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-shadow: 0 4px 20px #000;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .banner.show { opacity: 1; }
+    .start {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button {
+      font: inherit;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      background: var(--accent);
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+    button.small { padding: 2px 8px; font-size: 12px; background: #2a4a3c; color: var(--text); }
+    button.small:hover { background: #3a6150; }
+
+    .panel {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .panel h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin: 0 0 10px;
+    }
+    .debug { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-line; }
+
+    .meter {
+      height: 14px;
+      background: #0b1a14;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .meter > div { height: 100%; background: var(--accent); width: 0; transition: width 0.08s; }
+    .raise-info { display: flex; justify-content: space-between; margin-top: 6px; font-size: 14px; }
+    .raise-off { color: var(--muted); font-size: 14px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 4px 2px; }
+    th { color: var(--muted); font-weight: 500; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .legend td:first-child { font-weight: 600; width: 70px; }
+    .legend td { color: var(--text); }
+
+    #log { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; font-size: 14px; }
+    #log li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #1f4436; }
+    #log li .t { color: var(--muted); font-size: 12px; width: 64px; }
+    #log li .a { flex: 1; font-weight: 600; }
+    #log li.correct .a { color: var(--good); }
+    #log li.wrong .a { color: var(--bad); text-decoration: line-through; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Pokerface · Gesture Prototype</h1>
+    <span class="status" id="status">Not started</span>
+  </header>
+
+  <main>
+    <div>
+      <div class="stage">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
+        <div class="banner" id="banner"></div>
+        <div class="start" id="startWrap"><button id="startBtn">Start camera</button></div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="panel">
+        <h2>Gestures</h2>
+        <table class="legend">
+          <tr><td>Check</td><td>Knock twice (fist or pointing finger, up–down–up–down)</td></tr>
+          <tr><td>Call</td><td>Thumbs up, hold 1s</td></tr>
+          <tr><td>Fold</td><td>Thumbs down, hold 1s</td></tr>
+          <tr><td>Raise</td><td>Open palm, move up/down for amount, then fist, hold 0.6s</td></tr>
+          <tr><td>All-in</td><td>Both open palms, hold 1s</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Raise amount</h2>
+        <div id="raiseOff" class="raise-off">Show an open palm to start a raise</div>
+        <div id="raiseOn" hidden>
+          <div class="meter"><div id="raiseBar"></div></div>
+          <div class="raise-info"><span>Raise to</span><strong id="raiseAmt">0</strong></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Live detection</h2>
+        <div class="debug" id="debug">–</div>
+      </div>
+
+      <div class="panel">
+        <h2>Accuracy</h2>
+        <table>
+          <thead><tr><th>Action</th><th class="num">Fired</th><th class="num">✓</th><th class="num">✗</th><th class="num">Missed</th><th></th></tr></thead>
+          <tbody id="stats"></tbody>
+        </table>
+        <p style="color:var(--muted);font-size:12px;margin:8px 0 0">
+          Mark each fired action ✓/✗ in the log. Press “+” under Missed when you did a gesture and nothing fired.
+        </p>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="small" id="copyBtn">Copy results</button>
+          <button class="small" id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Log</h2>
+        <ul id="log"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

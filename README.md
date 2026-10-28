@@ -14,7 +14,7 @@ Online Texas Hold'em where you play **face to face over webcams** and act with *
 |-----------|----------------------------------|----------------------------|
 | Check     | Tap index finger down twice      | Knocking on the table      |
 | Call      | Thumbs up                        | Nod / push chips           |
-| Fold      | Flat hand swipe away             | Mucking cards              |
+| Fold      | Thumbs down                      | Mucking cards              |
 | Raise     | Open palm, raise hand up/down to set amount, fist to confirm | Sliding chips forward |
 | All-in    | Both hands pushed forward        | Pushing the whole stack    |
 
