@@ -49,7 +49,7 @@
 | Security | `npm audit` in CI (CodeQL optional) |
 | Hand evaluator | **Written by us** (it's the non-CRUD feature); a library only to check results in tests |
 
-Pin versions (`package-lock.json`, `npm ci`); ~12 third-party packages max per service. This is the stack record in `docs/decisions.md`.
+Pin versions (`package-lock.json`, `npm ci`); ~12 third-party packages max per service. We will record the stack decision in `docs/decisions.md`.
 
 ## 2. Ownership
 
@@ -70,9 +70,9 @@ Everyone adds their own AI-assisted work to `AI_USAGE.md` and reviews others' PR
 
 | Sprint | PO | SM |
 |---|---|---|
-| 0 | _M1_ | _M6_ |
-| 1 | _M5_ | _M2_ |
-| 2 | _M3_ | _M4_ |
+| 0 | _M5_ | _M6_ |
+| 1 | _M1_ | _M4_ |
+| 2 | _M3_ | _M2_ |
 
 ## 3. Timeline
 
