@@ -1,0 +1,83 @@
+name: pokerface
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_PID: Developer
+      MSSQL_MEMORY_LIMIT_MB: '2048'
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Run node scripts/setup-local.mjs first}
+    volumes:
+      - sql-data:/var/opt/mssql
+    healthcheck:
+      test: ['CMD-SHELL', 'SQLCMDPASSWORD="$$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -l 3 -Q "SELECT 1" > /dev/null']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ['/bin/bash', '/init/init.sh']
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Run node scripts/setup-local.mjs first}
+      PLAYERS_DB_PASSWORD: ${PLAYERS_DB_PASSWORD:?Run node scripts/setup-local.mjs first}
+      GAME_DB_PASSWORD: ${GAME_DB_PASSWORD:?Run node scripts/setup-local.mjs first}
+    volumes:
+      - ./db:/init:ro
+    restart: 'no'
+
+  players:
+    build: ./services/players
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      PORT: '3000'
+      DATABASE_URL: 'Server=db,1433;Database=players;User Id=players_app;Password=${PLAYERS_DB_PASSWORD};Encrypt=yes;TrustServerCertificate=yes'
+      UI_ORIGIN: http://localhost:${UI_PORT:-5173}
+      APP_VERSION: ${APP_VERSION:-local}
+    ports:
+      - '127.0.0.1:${PLAYERS_PORT:-3001}:3000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 30s
+
+  game:
+    build: ./services/game
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      PORT: '3000'
+      DATABASE_URL: 'Server=db,1433;Database=game;User Id=game_app;Password=${GAME_DB_PASSWORD};Encrypt=yes;TrustServerCertificate=yes'
+      UI_ORIGIN: http://localhost:${UI_PORT:-5173}
+      APP_VERSION: ${APP_VERSION:-local}
+      PLAYERS_URL: http://players:3000
+    ports:
+      - '127.0.0.1:${GAME_PORT:-3002}:3000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 30s
+
+  ui:
+    image: nginx:alpine
+    ports:
+      - '127.0.0.1:${UI_PORT:-5173}:80'
+    volumes:
+      - ./ui/index.html:/usr/share/nginx/html/index.html:ro
+
+volumes:
+  sql-data:
