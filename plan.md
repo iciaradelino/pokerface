@@ -57,12 +57,12 @@ Each owner builds, tests, documents and presents their area. Open your own PRs: 
 
 | # | Owner | Area | Deliverables | Docs | Review talk |
 |---|---|---|---|---|---|
-| 1 | _M1_ | **Gestures** (`ui/gestures/`) | Module from `prototype/gestures/`: emits `{action, amount}` + progress, active only on your turn, raise limits from game state; tutorial page; tests | Gesture decision | Gesture demo |
-| 2 | _M2_ | **Poker engine** (`services/game/src/engine/`) | Shuffle (secure RNG), blinds, betting, legal actions, side/split pots, evaluator, public/private state. Carries `game`'s 70% coverage | Non-CRUD feature decision | How a hand resolves |
-| 3 | _M3_ | **Game service** (`services/game/`) | API + WebSocket, tables, turn timer, migrations, `/health`, logging, calls to `players` with timeout/failure handling, signaling relay, Dockerfile, cross-service integration test | Architecture decision; `data-model.md` (game) | Architecture, partial failure |
-| 4 | _M4_ | **Players service + video** | `services/players/`: CRUD, results, leaderboard, migrations, `/health`, logging, Dockerfile, tests. Sprint 2: WebRTC tiles in `ui/video/` | Storage decision; `data-model.md` (players) | CRUD, leaderboard, video |
-| 5 | _M5_ | **UI** (`ui/`) | Profile, lobby, table (cards, pot, seats, timer), fallback buttons + raise slider, gesture ring, service-down messages, `config.js` with service URLs | `README.md` product + run locally | Product walkthrough |
-| 6 | _M6_ | **DevOps + monitoring** | Compose + `db/init.sql`, CI/CD, Bicep IaC, branch protection, secrets, dashboard, SLO, post-deploy health check, smoke test | Deployment + monitoring decisions; README Azure section | Live pipeline, dashboard + SLO |
+| 1 | Ali | **Gestures** (`ui/gestures/`) | Module from `prototype/gestures/`: emits `{action, amount}` + progress, active only on your turn, raise limits from game state; tutorial page; tests | Gesture decision | Gesture demo |
+| 2 | Olivia | **Poker engine** (`services/game/src/engine/`) | Shuffle (secure RNG), blinds, betting, legal actions, side/split pots, evaluator, public/private state. Carries `game`'s 70% coverage | Non-CRUD feature decision | How a hand resolves |
+| 3 | Lara | **Game service** (`services/game/`) | API + WebSocket, tables, turn timer, migrations, `/health`, logging, calls to `players` with timeout/failure handling, signaling relay, Dockerfile, cross-service integration test | Architecture decision; `data-model.md` (game) | Architecture, partial failure |
+| 4 | Laura | **Players service + video** | `services/players/`: CRUD, results, leaderboard, migrations, `/health`, logging, Dockerfile, tests. Sprint 2: WebRTC tiles in `ui/video/` | Storage decision; `data-model.md` (players) | CRUD, leaderboard, video |
+| 5 | Iciar | **UI** (`ui/`) | Profile, lobby, table (cards, pot, seats, timer), fallback buttons + raise slider, gesture ring, service-down messages, `config.js` with service URLs | `README.md` product + run locally | Product walkthrough |
+| 6 | Matteo | **DevOps + monitoring** | Compose + `db/init.sql`, CI/CD, Bicep IaC, branch protection, secrets, dashboard, SLO, post-deploy health check, smoke test | Deployment + monitoring decisions; README Azure section | Live pipeline, dashboard + SLO |
 
 Everyone adds their own AI-assisted work to `AI_USAGE.md` and reviews others' PRs.
 
