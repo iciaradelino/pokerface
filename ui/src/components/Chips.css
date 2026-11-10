@@ -1,0 +1,35 @@
+.chip-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-3) 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-table-edge);
+  color: #ffffff;
+  font-size: var(--text-small);
+  font-weight: 700;
+}
+
+.chip-amount__chip {
+  width: 20px;
+  height: 20px;
+  border: 2px dashed var(--color-chip-edge);
+  border-radius: 50%;
+  background: var(--color-chip);
+  box-shadow: 0 0 0 2px var(--color-chip);
+}
+
+.dealer-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-dealer);
+  color: var(--color-on-dealer);
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(15, 26, 20, 0.3);
+}

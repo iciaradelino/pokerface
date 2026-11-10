@@ -1,0 +1,359 @@
+/*
+ * Shared building blocks used by every screen: buttons, pills, inputs, panels.
+ * Game-specific pieces (playing cards, chips, avatars) live next to their React component
+ * in src/components/.
+ */
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--height-secondary);
+  padding: 0 var(--space-5);
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Sizes */
+.btn--primary-size {
+  min-height: var(--height-primary);
+  padding: 0 var(--space-6);
+  font-size: var(--text-body-lg);
+}
+
+.btn--hero-size {
+  min-height: var(--height-hero);
+  padding: 0 var(--space-8);
+  font-size: var(--text-body-lg);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* Variants */
+.btn--lime {
+  background: var(--color-lime);
+  color: var(--color-on-lime);
+}
+
+.btn--lime:hover:not(:disabled) {
+  background: var(--color-card-back-stripe);
+}
+
+.btn--ink {
+  background: var(--color-inverse-bg);
+  color: var(--color-inverse-text);
+}
+
+.btn--ink:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.btn--call {
+  background: var(--color-call);
+  color: var(--color-on-call);
+}
+
+.btn--call:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.btn--outline {
+  background: var(--color-surface);
+  border-color: var(--color-ink);
+  color: var(--color-ink);
+}
+
+.btn--outline:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-ink);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.btn--danger {
+  background: transparent;
+  border-color: var(--color-negative);
+  color: var(--color-negative);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+/* ---------- Pills (nav links, toggles, quick bets) ---------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--height-pill);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--text-small);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill:hover {
+  background: var(--color-surface-2);
+}
+
+.pill[aria-pressed='true'],
+.pill[aria-current='page'],
+.pill--selected {
+  background: var(--color-lime-soft);
+  border-color: var(--color-lime);
+  color: var(--color-ink);
+}
+
+.pill--quiet {
+  background: var(--color-surface-2);
+  border-color: transparent;
+  cursor: default;
+}
+
+.pill--sm {
+  min-height: var(--height-quick-bet);
+  padding: 0 var(--space-3);
+  font-size: var(--text-caption);
+}
+
+/* ---------- Form fields ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field__label {
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.field__hint {
+  font-size: var(--text-caption);
+  color: var(--color-muted);
+}
+
+.field__error {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-negative);
+}
+
+.input {
+  width: 100%;
+  min-height: var(--height-primary);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  font-size: var(--text-body-lg);
+}
+
+.input::placeholder {
+  color: var(--color-muted);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--color-lime);
+  box-shadow: 0 0 0 3px var(--color-lime-soft);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-negative);
+}
+
+/* Code input: table code, large and spaced */
+.input--code {
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--color-lime);
+}
+
+/* Toggle switch: <input type="checkbox" role="switch" class="switch"> */
+.switch {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 28px;
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  cursor: pointer;
+  transition: background-color var(--duration) var(--ease-out);
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 0 1px 3px rgba(15, 26, 20, 0.3);
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.switch:checked {
+  background: var(--color-lime);
+}
+
+.switch:checked::after {
+  transform: translateX(20px);
+  background: var(--color-on-lime);
+}
+
+/* ---------- Panels and cards ---------- */
+
+.panel {
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel--feature {
+  border: 0;
+  border-radius: var(--radius-feature);
+  background: var(--color-teal);
+  color: var(--color-on-teal);
+}
+
+.panel--feature .muted {
+  color: var(--color-on-teal-3);
+}
+
+.panel--dark {
+  border: 0;
+  border-radius: var(--radius-feature);
+  background: var(--color-dark-card);
+  color: var(--color-on-dark);
+}
+
+.panel--dark .muted,
+.panel--dark .label {
+  color: var(--color-on-dark-muted);
+}
+
+.panel--danger {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+/* Stat tile inside a dark card */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-input);
+  background: var(--color-dark-tile);
+}
+
+.stat__value {
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Table code shown big, e.g. in the waiting room */
+.table-code {
+  font-family: var(--font-display);
+  font-size: var(--text-table-code);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+/* Icon box: square tile behind a line icon */
+.icon-box {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-icon);
+  background: var(--color-surface-2);
+  color: var(--color-teal-icon);
+}
+
+/* Banner for "Player service unavailable" and similar */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-input);
+  background: var(--color-danger-bg);
+  color: var(--color-ink);
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+/* Green "Hand tracked" style status dot */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-positive);
+}
+
+.status-dot::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}

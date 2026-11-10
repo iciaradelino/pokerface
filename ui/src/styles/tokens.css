@@ -1,0 +1,217 @@
+/*
+ * Design tokens: the single source of colours, fonts, sizes and shadows.
+ * Values come from docs/style.md. Components use these variables, never raw hex values.
+ *
+ * Theme: follows the operating system by default. Setting data-theme="light" or
+ * data-theme="dark" on <html> forces one (see src/theme.js).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---------- Fonts ---------- */
+  --font-display:
+    'Sora', 'Inter', system-ui, sans-serif; /* headings, logo, card ranks, table code */
+  --font-body:
+    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; /* body, labels, buttons */
+
+  --text-hero: 64px;
+  --text-page-title: 42px; /* 40-44 */
+  --text-section-lg: 28px;
+  --text-section: 20px; /* 20-28 */
+  --text-table-code: 40px;
+  --text-body-lg: 16px;
+  --text-body: 15px;
+  --text-small: 13px;
+  --text-caption: 12px;
+
+  --tracking-heading: -0.03em;
+  --tracking-label: 0.08em;
+
+  /* ---------- Surfaces and text ---------- */
+  --color-bg: #f4f6f3;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef2ec; /* inputs, chips */
+  --color-border: #dce3d8;
+  --color-ink: #0f1a14;
+  --color-muted: #56635b;
+
+  /* ---------- Accents ---------- */
+  --color-lime: #b8f23a;
+  --color-on-lime: #132003;
+  --color-lime-text: #3f6b00; /* lime used as text or links */
+  --color-lime-soft: #f2fbdf; /* selected state */
+
+  --color-teal: #0e9f8e; /* table felt, feature panels */
+  --color-teal-line: #2db8a6;
+  --color-teal-icon: #0b7d70;
+  --color-on-teal: #ffffff;
+  --color-on-teal-2: #e6fffb;
+  --color-on-teal-3: #cff5ef;
+
+  /* Dark cards (stats, table code) */
+  --color-dark-card: #0f1a14;
+  --color-dark-tile: #1e2b25;
+  --color-on-dark: #eef3ef;
+  --color-on-dark-muted: #b9c4bd;
+
+  /* Inverted (ink) button */
+  --color-inverse-bg: #0f1a14;
+  --color-inverse-text: #ffffff;
+
+  /* ---------- Status ---------- */
+  --color-positive: #2f7a00;
+  --color-negative: #c2264f;
+  --color-danger-bg: #fff5f8;
+  --color-danger-border: #f5c2d0;
+
+  /* ---------- Game ---------- */
+  --color-table-edge: #0f1a14;
+  --color-chip: #ff5fa2;
+  --color-chip-edge: #ffd6e8;
+  --color-dealer: #ffc93c;
+  --color-on-dealer: #2a1e00;
+  --color-call: #5b8cff;
+  --color-on-call: #061433;
+  --color-card-face: #ffffff;
+  --color-suit-red: #e0245e;
+  --color-suit-black: #0f1a14;
+  --color-card-back: #b8f23a;
+  --color-card-back-stripe: #9ad61f;
+  --color-card-back-edge: #0f1a14;
+  --color-tile-bg: #1e2b25; /* camera tile */
+  --color-name-strip: rgba(8, 8, 14, 0.72);
+
+  /* Player colours: index = seat colour. Initials always use --color-on-player. */
+  --player-1: #b8f23a;
+  --player-2: #ff5fa2;
+  --player-3: #5b8cff;
+  --player-4: #ffb020;
+  --player-5: #2dd4bf;
+  --player-6: #c084fc;
+  --color-on-player: #15161a;
+
+  /* ---------- Shape ---------- */
+  --radius-pill: 999px; /* buttons, pills */
+  --radius-panel: 20px;
+  --radius-feature: 26px; /* 24-28 */
+  --radius-tile: 20px; /* camera tiles, 18-22 */
+  --radius-input: 14px;
+  --radius-card: 10px; /* playing cards */
+  --radius-icon: 12px; /* icon boxes, 10-12 */
+  --radius-table: 120px;
+
+  /* ---------- Sizes ---------- */
+  --height-primary: 52px;
+  --height-hero: 60px; /* Start game */
+  --height-secondary: 44px;
+  --height-pill: 40px; /* nav links, pills */
+  --height-quick-bet: 32px;
+  --tap-min: 44px;
+
+  --icon-size: 20px;
+  --icon-stroke: 2px;
+
+  /* ---------- Spacing and layout ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --page-padding: 32px;
+  --column-gap: 24px;
+  --content-max: 1360px;
+  --content-max-table: 1480px;
+
+  /* ---------- Shadows ---------- */
+  --shadow-card: 0 6px 16px rgba(15, 26, 20, 0.25);
+  --shadow-active-tile: 0 0 0 6px rgba(184, 242, 58, 0.45);
+  --shadow-table-base: #cfe0d9;
+  --shadow-table: 0 20px 0 -4px var(--shadow-table-base), 0 30px 80px rgba(14, 159, 142, 0.25);
+  --shadow-panel: 0 1px 2px rgba(15, 26, 20, 0.04);
+
+  /* ---------- Motion ---------- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration: 200ms;
+}
+
+/* Dark theme values. Duplicated on purpose: once for "follow the OS", once for "forced dark". */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-bg: #0b110e;
+    --color-surface: #141c18;
+    --color-surface-2: #1c2621;
+    --color-border: #2a3731;
+    --color-ink: #eef3ef;
+    --color-muted: #9aa8a0;
+
+    --color-lime-text: #b8f23a;
+    --color-lime-soft: #1f2b14;
+
+    --color-teal: #0b7d70;
+    --color-teal-line: #22a090;
+    --color-teal-icon: #5fd4c4;
+
+    --color-dark-card: #141c18;
+    --color-dark-tile: #26332c;
+
+    --color-inverse-bg: #eef3ef;
+    --color-inverse-text: #0f1a14;
+
+    --color-positive: #9be15d;
+    --color-negative: #ff7a98;
+    --color-danger-bg: #22141a;
+    --color-danger-border: #5a2433;
+
+    --color-table-edge: #050806;
+    --color-tile-bg: #18231e;
+
+    --shadow-table-base: #050806;
+    --shadow-table: 0 20px 0 -4px var(--shadow-table-base), 0 30px 80px rgba(11, 125, 112, 0.3);
+    --shadow-panel: none;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #0b110e;
+  --color-surface: #141c18;
+  --color-surface-2: #1c2621;
+  --color-border: #2a3731;
+  --color-ink: #eef3ef;
+  --color-muted: #9aa8a0;
+
+  --color-lime-text: #b8f23a;
+  --color-lime-soft: #1f2b14;
+
+  --color-teal: #0b7d70;
+  --color-teal-line: #22a090;
+  --color-teal-icon: #5fd4c4;
+
+  --color-dark-card: #141c18;
+  --color-dark-tile: #26332c;
+
+  --color-inverse-bg: #eef3ef;
+  --color-inverse-text: #0f1a14;
+
+  --color-positive: #9be15d;
+  --color-negative: #ff7a98;
+  --color-danger-bg: #22141a;
+  --color-danger-border: #5a2433;
+
+  --color-table-edge: #050806;
+  --color-tile-bg: #18231e;
+
+  --shadow-table-base: #050806;
+  --shadow-table: 0 20px 0 -4px var(--shadow-table-base), 0 30px 80px rgba(11, 125, 112, 0.3);
+  --shadow-panel: none;
+}
