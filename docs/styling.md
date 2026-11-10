@@ -76,6 +76,6 @@ Never write a hex value in a component. Every value above is a CSS variable, and
 | `ui/src/styles/components.css` | `.btn` + variants, `.pill`, `.input`, `.switch`, `.panel` (`--feature`, `--dark`, `--danger`), `.stat`, `.banner` |
 | `ui/src/components/` | `Button`, `PlayingCard` (takes engine cards like `"As"`), `Avatar` (initials + player colour), `ChipAmount`, `DealerButton` |
 
-Naming: `--color-<role>` (`--color-lime`, `--color-muted`), `--player-1` … `--player-6`, `--radius-<thing>`, `--height-<button>`, `--space-<n>` (4px steps), `--text-<size>`. Open http://localhost:5173/styleguide to see them all in both themes.
+Naming: `--color-<role>` (`--color-lime`, `--color-muted`), `--player-1` … `--player-6`, `--radius-<thing>`, `--height-<button>`, `--space-<n>` (4px steps), `--text-<size>`.
 
 The theme follows the operating system. `setTheme('light' | 'dark' | 'system')` in `ui/src/theme.js` forces one.
