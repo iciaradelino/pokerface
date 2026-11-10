@@ -1,0 +1,61 @@
+.playing-card {
+  --card-w: 56px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  width: var(--card-w);
+  aspect-ratio: 5 / 7;
+  padding: calc(var(--card-w) * 0.1) calc(var(--card-w) * 0.12);
+  border-radius: var(--radius-card);
+  background: var(--color-card-face);
+  box-shadow: var(--shadow-card);
+  color: var(--color-suit-black);
+  font-family: var(--font-display);
+  user-select: none;
+}
+
+.playing-card--sm {
+  --card-w: 40px;
+}
+
+.playing-card--md {
+  --card-w: 56px;
+}
+
+.playing-card--lg {
+  --card-w: 72px;
+}
+
+.playing-card--red {
+  color: var(--color-suit-red);
+}
+
+.playing-card__rank {
+  font-size: calc(var(--card-w) * 0.4);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.playing-card__suit {
+  align-self: flex-end;
+  font-size: calc(var(--card-w) * 0.42);
+  line-height: 1;
+}
+
+.playing-card--back {
+  border: 3px solid var(--color-card-back-edge);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-card-back) 0 6px,
+    var(--color-card-back-stripe) 6px 12px
+  );
+}
+
+.playing-card--slot {
+  border: 2px dashed var(--color-teal-line);
+  background: transparent;
+  box-shadow: none;
+}
