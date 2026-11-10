@@ -44,6 +44,18 @@ describe('POST /players/:id/results', () => {
     expect(response.body.chips).toBe(0);
   });
 
+  it('gives the same balance whatever order the results arrive in (regression)', async () => {
+    // A -1500 loss that arrives before an earlier +1000 win must not lose the win.
+    const late = await createPlayer('Late');
+    await saveResult(late.id, { handId: hand2, delta: -1500 });
+    const lateFinal = await saveResult(late.id, { handId: hand1, delta: 1000 });
+    const inOrder = await createPlayer('InOrder');
+    await saveResult(inOrder.id, { handId: hand1, delta: 1000 });
+    const inOrderFinal = await saveResult(inOrder.id, { handId: hand2, delta: -1500 });
+    expect(lateFinal.body.chips).toBe(500);
+    expect(inOrderFinal.body.chips).toBe(500);
+  });
+
   it('returns 404 for an unknown player', async () => {
     const response = await saveResult(missingId, { handId: hand1, delta: 10 });
     expect(response.status).toBe(404);
@@ -99,10 +111,10 @@ describe('GET /leaderboard', () => {
     expect(response.body[0]).toEqual({ id: zoe.id, name: 'Zoe', chips: 1500 });
   });
 
-  it('returns at most 20 players', async () => {
-    for (let i = 0; i < 25; i++) await createPlayer(`Player ${i}`);
+  it('returns at most 10 players', async () => {
+    for (let i = 0; i < 15; i++) await createPlayer(`Player ${i}`);
     const response = await request(app).get('/leaderboard');
-    expect(response.body).toHaveLength(20);
+    expect(response.body).toHaveLength(10);
   });
 
   it('answers 503 when the database is down', async () => {

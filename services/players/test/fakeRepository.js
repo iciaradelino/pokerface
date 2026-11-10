@@ -1,12 +1,15 @@
+import { STARTING_CHIPS } from '../src/playersRepository.js';
+
 // In-memory stand-in for the SQL repository, with the behaviour the routes rely on.
 export function fakeRepository() {
   const rows = new Map();
   const saved = new Set(); // "handId:playerId"
+  const deltas = new Map(); // playerId -> every saved delta
   let next = 1;
   return {
     async create({ name, avatar, gestureSettings }) {
       const id = `00000000-0000-4000-8000-${String(next++).padStart(12, '0')}`;
-      const player = { id, name, avatar, chips: 1000, gestureSettings };
+      const player = { id, name, avatar, chips: STARTING_CHIPS, gestureSettings };
       rows.set(id, player);
       return { ...player };
     },
@@ -34,14 +37,17 @@ export function fakeRepository() {
       const key = `${handId}:${id}`;
       if (!saved.has(key)) {
         saved.add(key);
-        current.chips = Math.max(0, current.chips + delta);
+        deltas.set(id, [...(deltas.get(id) ?? []), delta]);
+        // Same rule as the SQL: starting stack plus all deltas, never below 0.
+        const total = deltas.get(id).reduce((sum, value) => sum + value, STARTING_CHIPS);
+        current.chips = Math.max(0, total);
       }
       return { ...current };
     },
     async leaderboard() {
       return [...rows.values()]
         .sort((a, b) => b.chips - a.chips || a.name.localeCompare(b.name))
-        .slice(0, 20)
+        .slice(0, 10)
         .map(({ id, name, chips }) => ({ id, name, chips }));
     },
   };

@@ -100,10 +100,15 @@ export function createApp({
 
   app.use((_request, response) => sendError(response, 404, 'NOT_FOUND', 'Not found'));
 
-  // Malformed JSON and other errors raised before a route runs.
+  // Errors raised before a route runs. Anything the client got wrong (malformed JSON, a body
+  // that is too large, a URL such as /players/%ZZ that cannot be decoded) is a 4xx, not an outage.
   app.use((error, _request, response, _next) => {
+    const status = error.status ?? error.statusCode;
     if (error.type === 'entity.parse.failed' || error.type === 'entity.too.large') {
       return sendError(response, 400, 'INVALID_INPUT', 'Request body is not valid JSON or is too large');
+    }
+    if (status >= 400 && status < 500) {
+      return sendError(response, 400, 'INVALID_INPUT', 'Invalid request');
     }
     return sendError(response, 503, 'UNAVAILABLE', 'Player service unavailable');
   });

@@ -1,5 +1,8 @@
 import sql from 'mssql';
 
+// Must match the default of players.chips in migration 002.
+export const STARTING_CHIPS = 1000;
+
 // All SQL for the players table lives here, so the routes can be tested with a fake.
 function toPlayer(row) {
   return {
@@ -68,7 +71,8 @@ export function createPlayersRepository(pool) {
           .request()
           .input('id', sql.UniqueIdentifier, id)
           .input('handId', sql.UniqueIdentifier, handId)
-          .input('delta', sql.Int, delta).query(`
+          .input('delta', sql.Int, delta)
+          .input('startingChips', sql.BigInt, STARTING_CHIPS).query(`
             DECLARE @found INT;
             SELECT @found = COUNT(*) FROM dbo.players WITH (UPDLOCK, HOLDLOCK) WHERE id = @id;
             IF @found = 1 AND NOT EXISTS (
@@ -76,15 +80,23 @@ export function createPlayersRepository(pool) {
             )
             BEGIN
               INSERT INTO dbo.hand_results (hand_id, player_id, delta) VALUES (@handId, @id, @delta);
-              UPDATE dbo.players
+              -- Chips are the starting stack plus every saved delta, limited to 0..INT max.
+              -- Recomputing from all results (not adjusting the old balance) means the order in
+              -- which results arrive cannot change the final balance.
+              UPDATE p
               SET chips = CAST(
                     CASE
-                      WHEN CAST(chips AS BIGINT) + @delta < 0 THEN 0
-                      WHEN CAST(chips AS BIGINT) + @delta > 2147483647 THEN 2147483647
-                      ELSE CAST(chips AS BIGINT) + @delta
+                      WHEN t.total < 0 THEN 0
+                      WHEN t.total > 2147483647 THEN 2147483647
+                      ELSE t.total
                     END AS INT),
                   updated_at = SYSUTCDATETIME()
-              WHERE id = @id;
+              FROM dbo.players AS p
+              CROSS APPLY (
+                SELECT @startingChips + COALESCE(SUM(CAST(r.delta AS BIGINT)), 0) AS total
+                FROM dbo.hand_results AS r WHERE r.player_id = p.id
+              ) AS t
+              WHERE p.id = @id;
             END
             SELECT ${columns} FROM dbo.players WHERE id = @id;`);
         await transaction.commit();
@@ -95,10 +107,10 @@ export function createPlayersRepository(pool) {
       }
     },
 
-    // Top 20 by chips, ties broken by name.
+    // Top 10 by chips (issue #15), ties broken by name.
     async leaderboard() {
       const result = await pool.request().query(
-        'SELECT TOP 20 id, name, chips FROM dbo.players ORDER BY chips DESC, name ASC',
+        'SELECT TOP 10 id, name, chips FROM dbo.players ORDER BY chips DESC, name ASC',
       );
       return result.recordset.map((row) => ({
         id: row.id.toLowerCase(),

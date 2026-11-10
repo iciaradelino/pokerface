@@ -99,6 +99,26 @@ describe('GET /players/:id', () => {
   });
 });
 
+describe('URLs that cannot be decoded (regression)', () => {
+  it.each([
+    ['GET', 'get'],
+    ['PUT', 'put'],
+    ['DELETE', 'delete'],
+  ])('%s /players/%%ZZ answers 400 INVALID_INPUT, not an outage', async (_method, verb) => {
+    const response = await request(app)[verb]('/players/%ZZ').send({ name: 'Laura' });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_INPUT');
+  });
+
+  it('POST /players/%ZZ/results answers 400 INVALID_INPUT', async () => {
+    const response = await request(app)
+      .post('/players/%ZZ/results')
+      .send({ handId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', delta: 1 });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_INPUT');
+  });
+});
+
 describe('PUT /players/:id', () => {
   it('updates the name and keeps the other fields when they are omitted', async () => {
     const created = (
