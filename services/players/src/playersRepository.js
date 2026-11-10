@@ -57,6 +57,56 @@ export function createPlayersRepository(pool) {
       return result.recordset[0] ? toPlayer(result.recordset[0]) : null;
     },
 
+    // Saves a hand result once per (handId, player) and returns the player, or null if unknown.
+    // A repeated handId changes nothing, so the game service can safely retry. The row lock
+    // makes two retries arriving together run one after the other.
+    async saveResult(id, { handId, delta }) {
+      const transaction = pool.transaction();
+      await transaction.begin();
+      try {
+        const result = await transaction
+          .request()
+          .input('id', sql.UniqueIdentifier, id)
+          .input('handId', sql.UniqueIdentifier, handId)
+          .input('delta', sql.Int, delta).query(`
+            DECLARE @found INT;
+            SELECT @found = COUNT(*) FROM dbo.players WITH (UPDLOCK, HOLDLOCK) WHERE id = @id;
+            IF @found = 1 AND NOT EXISTS (
+              SELECT 1 FROM dbo.hand_results WHERE hand_id = @handId AND player_id = @id
+            )
+            BEGIN
+              INSERT INTO dbo.hand_results (hand_id, player_id, delta) VALUES (@handId, @id, @delta);
+              UPDATE dbo.players
+              SET chips = CAST(
+                    CASE
+                      WHEN CAST(chips AS BIGINT) + @delta < 0 THEN 0
+                      WHEN CAST(chips AS BIGINT) + @delta > 2147483647 THEN 2147483647
+                      ELSE CAST(chips AS BIGINT) + @delta
+                    END AS INT),
+                  updated_at = SYSUTCDATETIME()
+              WHERE id = @id;
+            END
+            SELECT ${columns} FROM dbo.players WHERE id = @id;`);
+        await transaction.commit();
+        return result.recordset[0] ? toPlayer(result.recordset[0]) : null;
+      } catch (error) {
+        await transaction.rollback().catch(() => {});
+        throw error;
+      }
+    },
+
+    // Top 20 by chips, ties broken by name.
+    async leaderboard() {
+      const result = await pool.request().query(
+        'SELECT TOP 20 id, name, chips FROM dbo.players ORDER BY chips DESC, name ASC',
+      );
+      return result.recordset.map((row) => ({
+        id: row.id.toLowerCase(),
+        name: row.name,
+        chips: row.chips,
+      }));
+    },
+
     // Returns true if a player was deleted. Their hand_results go with them (ON DELETE CASCADE).
     async remove(id) {
       const result = await pool
