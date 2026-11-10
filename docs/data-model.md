@@ -6,7 +6,7 @@ Each service owns its own database and no service reads another's tables. This f
 
 Database `players`, owned by `services/players/`. Owner: Laura.
 
-> The tables below are created by `services/players/migrations/002_players.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
+> The tables below are created by `services/players/migrations/002_players.sql`, plus an index added by `003_hand_results_player_index.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
 
 ```mermaid
 erDiagram
@@ -51,6 +51,8 @@ One row per player per finished hand.
 | `created_at` | `DATETIME2` | UTC. |
 
 The primary key is (`hand_id`, `player_id`). It makes saving a result idempotent: if the game service retries after a timeout, the second insert is detected and the chips are not changed again.
+
+An index on `player_id` (`IX_hand_results_player`, with `delta` included, migration `003`) lets the balance be summed per player without scanning other players' rows. Without it, simultaneous saves for different players deadlocked.
 
 ### Rules
 
