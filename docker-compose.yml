@@ -72,12 +72,31 @@ services:
       retries: 12
       start_period: 30s
 
+  # Builds the React app into ui/dist once, then exits. Linux node_modules stay in a volume,
+  # so they never mix with the ones on your machine.
+  ui-build:
+    image: node:22-alpine
+    working_dir: /app
+    command: ['sh', '-c', 'npm ci --no-audit --no-fund && npm run build']
+    environment:
+      VITE_PLAYERS_URL: http://localhost:${PLAYERS_PORT:-3001}
+      VITE_GAME_URL: http://localhost:${GAME_PORT:-3002}
+    volumes:
+      - ./ui:/app
+      - ui-node-modules:/app/node_modules
+    restart: 'no'
+
   ui:
     image: nginx:alpine
+    depends_on:
+      ui-build:
+        condition: service_completed_successfully
     ports:
       - '127.0.0.1:${UI_PORT:-5173}:80'
     volumes:
-      - ./ui/index.html:/usr/share/nginx/html/index.html:ro
+      - ./ui/dist:/usr/share/nginx/html:ro
+      - ./ui/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   sql-data:
+  ui-node-modules:
