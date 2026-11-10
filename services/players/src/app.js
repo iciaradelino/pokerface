@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { isUuid, validatePlayerInput } from './validation.js';
+import { isUuid, validatePlayerInput, validateResultInput } from './validation.js';
 
 function sendError(response, status, code, message) {
   response.status(status).json({ message, code });
@@ -84,6 +84,19 @@ export function createApp({
     if (!removed) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
     response.status(204).end();
   })));
+
+  // Called by the game service after each hand. Repeating a handId is safe.
+  app.post('/players/:id/results', withValidId(route(async (request, response) => {
+    const { value, error } = validateResultInput(request.body);
+    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+    const player = await players.saveResult(request.params.id, value);
+    if (!player) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
+    response.json(player);
+  })));
+
+  app.get('/leaderboard', route(async (_request, response) => {
+    response.json(await players.leaderboard());
+  }));
 
   app.use((_request, response) => sendError(response, 404, 'NOT_FOUND', 'Not found'));
 

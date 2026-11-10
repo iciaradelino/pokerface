@@ -9,6 +9,20 @@ export function isUuid(value) {
   return typeof value === 'string' && UUID.test(value);
 }
 
+const MAX_DELTA = 1_000_000_000;
+
+/** Validates the body of POST /players/:id/results: { handId: uuid, delta: integer }. */
+export function validateResultInput(body) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Request body must be a JSON object' };
+  }
+  if (!isUuid(body.handId)) return { error: 'handId must be a UUID' };
+  if (!Number.isInteger(body.delta) || Math.abs(body.delta) > MAX_DELTA) {
+    return { error: 'delta must be an integer between -1000000000 and 1000000000' };
+  }
+  return { value: { handId: body.handId.toLowerCase(), delta: body.delta } };
+}
+
 /**
  * Validates the body of POST /players (create) and PUT /players/:id (update).
  * Unknown fields are ignored, so a client cannot set `chips`.

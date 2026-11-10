@@ -1,41 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
+import { fakeRepository } from './fakeRepository.js';
 
 const uiOrigin = 'http://localhost:5173';
 const missingId = '11111111-1111-4111-8111-111111111111';
-
-// In-memory stand-in for the SQL repository, with the same behaviour the routes rely on.
-function fakeRepository() {
-  const rows = new Map();
-  let next = 1;
-  return {
-    async create({ name, avatar, gestureSettings }) {
-      const id = `00000000-0000-4000-8000-${String(next++).padStart(12, '0')}`;
-      const player = { id, name, avatar, chips: 1000, gestureSettings };
-      rows.set(id, player);
-      return { ...player };
-    },
-    async get(id) {
-      return rows.has(id) ? { ...rows.get(id) } : null;
-    },
-    async update(id, { name, avatar, gestureSettings }) {
-      const current = rows.get(id);
-      if (!current) return null;
-      const updated = {
-        ...current,
-        name,
-        avatar: avatar ?? current.avatar,
-        gestureSettings: gestureSettings ?? current.gestureSettings,
-      };
-      rows.set(id, updated);
-      return { ...updated };
-    },
-    async remove(id) {
-      return rows.delete(id);
-    },
-  };
-}
 
 let app;
 let players;
