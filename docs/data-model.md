@@ -6,7 +6,7 @@ Each service owns its own database and no service reads another's tables. This f
 
 Database `players`, owned by `services/players/`. Owner: Laura.
 
-> Status: the tables below are the agreed design. They will be created by migration `002` (not yet written). `health_checks` already exists from `001_health.sql` and is only used by `/health`.
+> The tables below are created by `services/players/migrations/002_players.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
 
 ```mermaid
 erDiagram
@@ -54,8 +54,9 @@ The primary key is (`hand_id`, `player_id`). It makes saving a result idempotent
 
 ### Rules
 
-- **Saving a result** inserts the `hand_results` row and updates `players.chips` in one transaction. The new balance is `max(0, chips + delta)`.
-- **Leaderboard** is computed from `players.chips`, highest first, ties broken by name, top 20. It has no table of its own.
+- **Saving a result** inserts the `hand_results` row and updates `players.chips` in one transaction, locking the player's row so two retries of the same hand run one after the other.
+- **Chip balance** is the starting stack (1000) plus the sum of all saved `delta` values, limited to 0 up to the maximum `INT`. It is recomputed from `hand_results` each time, not adjusted from the previous balance, so the order in which results arrive does not change the final balance. For example, a loss of 1500 that arrives before an earlier win of 1000 still ends at 500.
+- **Leaderboard** is computed from `players.chips`, highest first, ties broken by name, top 10 (issue #15). It has no table of its own.
 - **Deleting a player** also deletes their `hand_results` rows.
 
 ### HTTP contract
@@ -69,7 +70,7 @@ All errors use `{ "message": "...", "code": "..." }`. Codes: `INVALID_INPUT` (40
 | `PUT /players/:id` | `{ name, avatar?, gestureSettings? }` | `200` + Player |
 | `DELETE /players/:id` | | `204` |
 | `POST /players/:id/results` | `{ handId, delta }` (`delta` is an integer) | `200` + updated Player, also when `handId` was already saved |
-| `GET /leaderboard` | | `200` + `[{ id, name, chips }]` |
+| `GET /leaderboard` | | `200` + top 10 as `[{ id, name, chips }]` |
 
 Player as returned by the API:
 
