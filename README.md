@@ -46,6 +46,25 @@ npm run test:coverage
 
 Our tests cover health responses, recovery, allowed browser origins and request logs. We still need to add the full service tests and enforce 70% coverage in CI.
 
+### UI
+
+`docker compose up` builds the UI into `ui/dist` and serves it at http://localhost:5173. While working on the UI, use the Vite dev server instead, which reloads on every change. Stop the Compose `ui` service first, because both use port 5173:
+
+```sh
+cd ui
+npm ci
+npm run dev
+```
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server at http://localhost:5173 |
+| `npm test` / `npm run test:coverage` | Vitest + Testing Library, fails below 70% coverage |
+| `npm run lint` / `npm run format:check` | ESLint and Prettier |
+| `npm run build` | Static files in `ui/dist` for Static Web Apps |
+
+Service URLs come from `VITE_PLAYERS_URL` and `VITE_GAME_URL` (defaults: ports 3001 and 3002). Copy `ui/.env.example` to `ui/.env.local` to change them. Colours, fonts and shared components follow [docs/styling.md](docs/styling.md).
+
 With the stack running, these checks also verify database isolation, migrations and removal of health-check rows:
 
 ```sh
