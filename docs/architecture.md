@@ -46,7 +46,7 @@ pokerface/
 └── docker-compose.yml
 ```
 
-We currently have health endpoints and a placeholder page. The engine, gestures, video, infrastructure and workflow folders are placeholders for their owners to fill in.
+The players backend supports profile CRUD, hand results and the top-10 leaderboard. The game backend currently provides health checks, and the React frontend has a placeholder home page. The engine, gestures, video, infrastructure and workflow folders are still placeholders.
 
 ## How the parts connect
 

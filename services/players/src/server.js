@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { connectDatabase, migrate, checkDatabase } from './database.js';
+import { createPlayersRepository } from './playersRepository.js';
 
 let pool;
 try {
@@ -7,6 +8,7 @@ try {
   await migrate(pool);
   const app = createApp({
     checkDatabase: () => checkDatabase(pool),
+    players: createPlayersRepository(pool),
     version: process.env.APP_VERSION || 'local',
     uiOrigin: process.env.UI_ORIGIN,
   });

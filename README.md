@@ -4,7 +4,7 @@ Online Texas Hold'em where you play **face to face over webcams** and act with *
 
 ## Run locally
 
-Our local setup runs two backend services, separate databases in SQL Server, and a placeholder web page. We will build the poker and profile features on top of this.
+Our local setup runs two backend services, separate databases in SQL Server, and the React frontend. The players API supports profiles, saved hand results and the leaderboard. The game backend currently provides health checks, and the frontend has a placeholder home page.
 
 You need Docker Desktop running and Node.js 22+. On Apple Silicon, enable Rosetta emulation in Docker Desktop and give Docker at least 4 GB of memory.
 
@@ -46,6 +46,25 @@ npm run test:coverage
 
 Our tests cover health responses, recovery, allowed browser origins and request logs. We still need to add the full service tests and enforce 70% coverage in CI.
 
+### UI
+
+`docker compose up` builds the UI into `ui/dist` and serves it at http://localhost:5173. While working on the UI, use the Vite dev server instead, which reloads on every change. Stop the Compose `ui` service first, because both use port 5173:
+
+```sh
+cd ui
+npm ci
+npm run dev
+```
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server at http://localhost:5173 |
+| `npm test` / `npm run test:coverage` | Vitest + Testing Library, fails below 70% coverage |
+| `npm run lint` / `npm run format:check` | ESLint and Prettier |
+| `npm run build` | Static files in `ui/dist` for Static Web Apps |
+
+Service URLs come from `VITE_PLAYERS_URL` and `VITE_GAME_URL` (defaults: ports 3001 and 3002). Copy `ui/.env.example` to `ui/.env.local` to change them. Colours, fonts and shared components follow [docs/styling.md](docs/styling.md).
+
 With the stack running, these checks also verify database isolation, migrations and removal of health-check rows:
 
 ```sh
@@ -55,9 +74,9 @@ docker compose exec -T game node --input-type=module < scripts/check-database.mj
 
 ### Azure deployment
 
-We are class 3A, group 5. We will use `rg-sdd-3a-g5` and name our resources with the prefix `sdd-3a-g5`. We still need the professor's group credentials and access to the resource group. We will store the credentials in GitHub Actions secrets, then set up Bicep and CI/CD in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
+We are class 3A, group 5. We will use `rg-sdd-3a-g5` and name our resources with the prefix `sdd-3a-g5`. We still need the professor's group credentials and must verify access to the resource group. We will store the credentials in GitHub Actions secrets, then set up Bicep and CI/CD in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
 
-See the [architecture guide](docs/architecture.md) for code locations, plus our [Definition of Done draft](docs/scrum/definition-of-done.md) and [Sprint 0 record](docs/scrum/sprint-0.md).
+See the [architecture guide](docs/architecture.md) for code locations, plus our [Definition of Done](docs/scrum/definition-of-done.md) and [Sprint 0 record](docs/scrum/sprint-0.md).
 
 ## Core experience
 
