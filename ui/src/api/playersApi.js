@@ -6,6 +6,10 @@ import { request } from './http.js';
 const players = (path, options) => request('players', config.playersUrl, path, options);
 
 export const playersApi = {
+  /**
+   * body: { name, avatar, gesturesEnabled }. avatar is the chosen colour
+   * ("lime" | "pink" | "blue" | "amber" | "teal" | "violet"). Returns the player with its `id`.
+   */
   create: (player) => players('/players', { method: 'POST', body: player }),
   get: (id) => players(`/players/${encodeURIComponent(id)}`),
   update: (id, changes) =>

@@ -1,12 +1,30 @@
-import { Route, Routes } from 'react-router';
-import { HomePage } from './pages/HomePage.jsx';
+import { Navigate, Route, Routes } from 'react-router';
+import { CreatePlayerPage } from './pages/CreatePlayerPage.jsx';
+import { LobbyPage } from './pages/LobbyPage.jsx';
 import { NotFoundPage } from './pages/NotFoundPage.jsx';
+import { getPlayerId } from './player.js';
 
-// Screens are added here as they are built: profile, lobby, waiting room, table, leaderboard.
+/** Pages that need a player send you to "Create your player" first. */
+function RequirePlayer({ children }) {
+  return getPlayerId() ? children : <Navigate to="/" replace />;
+}
+
+// Screens are added here as they are built: profile, waiting room, table, leaderboard.
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route
+        path="/"
+        element={getPlayerId() ? <Navigate to="/lobby" replace /> : <CreatePlayerPage />}
+      />
+      <Route
+        path="/lobby"
+        element={
+          <RequirePlayer>
+            <LobbyPage />
+          </RequirePlayer>
+        }
+      />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
