@@ -1,0 +1,4 @@
+# Shell scripts run inside Linux containers, where Windows line endings (CRLF) break them
+# ("set: pipefail: invalid option name"). Always check them out with LF, even when
+# core.autocrlf is on.
+*.sh text eol=lf
