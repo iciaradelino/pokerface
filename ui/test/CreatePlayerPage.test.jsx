@@ -75,8 +75,8 @@ describe('CreatePlayerPage', () => {
     expect(getPlayerId()).toBe('p-42');
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
       name: 'Alex',
-      avatar: 'pink',
-      gesturesEnabled: false,
+      avatar: '#FF5FA2',
+      gestureSettings: { enabled: false },
     });
   });
 

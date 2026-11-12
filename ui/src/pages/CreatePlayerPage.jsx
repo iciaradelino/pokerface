@@ -42,8 +42,8 @@ export function CreatePlayerPage() {
     try {
       const player = await playersApi.create({
         name: name.trim(),
-        avatar: colour,
-        gesturesEnabled: gestures,
+        avatar: COLOUR_CHOICES.find((choice) => choice.id === colour).hex,
+        gestureSettings: { enabled: gestures },
       });
       savePlayerId(player.id);
       navigate('/lobby', { replace: true });

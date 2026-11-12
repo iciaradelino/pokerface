@@ -7,8 +7,8 @@ const players = (path, options) => request('players', config.playersUrl, path, o
 
 export const playersApi = {
   /**
-   * body: { name, avatar, gesturesEnabled }. avatar is the chosen colour
-   * ("lime" | "pink" | "blue" | "amber" | "teal" | "violet"). Returns the player with its `id`.
+   * body: { name, avatar, gestureSettings }. avatar is a hex colour such as "#B8F23A";
+   * gestureSettings is a small JSON object. Returns { id, name, avatar, chips, gestureSettings }.
    */
   create: (player) => players('/players', { method: 'POST', body: player }),
   get: (id) => players(`/players/${encodeURIComponent(id)}`),

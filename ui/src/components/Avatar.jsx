@@ -3,19 +3,19 @@ import './Avatar.css';
 export const PLAYER_COLOURS = 6;
 
 /**
- * The colour a player picks, stored as their `avatar` in the players service.
- * Order matches --player-1 … --player-6 in tokens.css.
+ * The colour a player picks. The players service stores it as `avatar`, a hex colour, and
+ * defaults to lime (#B8F23A). Order and values match --player-1 … --player-6 in tokens.css.
  */
 export const COLOUR_CHOICES = [
-  { id: 'lime', label: 'Lime' },
-  { id: 'pink', label: 'Pink' },
-  { id: 'blue', label: 'Blue' },
-  { id: 'amber', label: 'Amber' },
-  { id: 'teal', label: 'Teal' },
-  { id: 'violet', label: 'Violet' },
+  { id: 'lime', label: 'Lime', hex: '#B8F23A' },
+  { id: 'pink', label: 'Pink', hex: '#FF5FA2' },
+  { id: 'blue', label: 'Blue', hex: '#5B8CFF' },
+  { id: 'amber', label: 'Amber', hex: '#FFB020' },
+  { id: 'teal', label: 'Teal', hex: '#2DD4BF' },
+  { id: 'violet', label: 'Violet', hex: '#C084FC' },
 ];
 
-/** CSS colour for a colour key, e.g. "pink" → "var(--player-2)". */
+/** CSS colour for a colour key, e.g. "pink" or "#FF5FA2" → "var(--player-2)". */
 export function playerColour(key) {
   return `var(--player-${colourIndex(key) + 1})`;
 }
@@ -29,12 +29,15 @@ export function initials(name = '') {
 }
 
 /**
- * Picks one of the six player colours: a chosen colour ("pink"), a seat number, or any
+ * Picks one of the six player colours: a chosen colour ("pink" or its hex), a seat number, or any
  * other stable value such as a player id, so the same player keeps the same colour everywhere.
  */
 export function colourIndex(key) {
   if (typeof key === 'number') return ((key % PLAYER_COLOURS) + PLAYER_COLOURS) % PLAYER_COLOURS;
-  const chosen = COLOUR_CHOICES.findIndex((choice) => choice.id === key);
+  const wanted = String(key ?? '').toLowerCase();
+  const chosen = COLOUR_CHOICES.findIndex(
+    (choice) => choice.id === wanted || choice.hex.toLowerCase() === wanted,
+  );
   if (chosen !== -1) return chosen;
   let hash = 0;
   for (const char of String(key ?? '')) hash = (hash * 31 + char.charCodeAt(0)) | 0;

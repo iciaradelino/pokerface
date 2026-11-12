@@ -78,4 +78,9 @@ describe('chosen colours', () => {
     expect(colourIndex('violet')).toBe(5);
     expect(playerColour('pink')).toBe('var(--player-2)');
   });
+
+  it('maps the hex colours the players service stores, in any case', () => {
+    expect(colourIndex('#B8F23A')).toBe(0);
+    expect(playerColour('#ff5fa2')).toBe('var(--player-2)');
+  });
 });
