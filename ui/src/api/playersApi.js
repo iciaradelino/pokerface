@@ -6,6 +6,10 @@ import { request } from './http.js';
 const players = (path, options) => request('players', config.playersUrl, path, options);
 
 export const playersApi = {
+  /**
+   * body: { name, avatar, gestureSettings }. avatar is a hex colour such as "#B8F23A";
+   * gestureSettings is a small JSON object. Returns { id, name, avatar, chips, gestureSettings }.
+   */
   create: (player) => players('/players', { method: 'POST', body: player }),
   get: (id) => players(`/players/${encodeURIComponent(id)}`),
   update: (id, changes) =>

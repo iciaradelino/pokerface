@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PlayingCard, parseCard } from '../src/components/PlayingCard.jsx';
-import { Avatar, colourIndex, initials } from '../src/components/Avatar.jsx';
+import { Avatar, colourIndex, initials, playerColour } from '../src/components/Avatar.jsx';
 import { formatChips, formatDelta } from '../src/components/Chips.jsx';
 import { Button } from '../src/components/Button.jsx';
 
@@ -69,5 +69,18 @@ describe('Button', () => {
     const button = screen.getByRole('button', { name: 'Start' });
     expect(button).toHaveClass('btn', 'btn--lime', 'btn--primary-size', 'btn--block');
     expect(button).toHaveAttribute('type', 'button');
+  });
+});
+
+describe('chosen colours', () => {
+  it('maps colour names to the player colour tokens', () => {
+    expect(colourIndex('lime')).toBe(0);
+    expect(colourIndex('violet')).toBe(5);
+    expect(playerColour('pink')).toBe('var(--player-2)');
+  });
+
+  it('maps the hex colours the players service stores, in any case', () => {
+    expect(colourIndex('#B8F23A')).toBe(0);
+    expect(playerColour('#ff5fa2')).toBe('var(--player-2)');
   });
 });
