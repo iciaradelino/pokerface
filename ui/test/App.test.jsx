@@ -39,7 +39,14 @@ describe('App routes', () => {
   it('opens the waiting room for a table code', () => {
     savePlayerId('p-1');
     renderAt('/tables/k7qx2m');
-    expect(screen.getByText('K7QX2M')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Taking your seat…' })).toBeInTheDocument();
+    expect(screen.getByText('Table K7QX2M')).toBeInTheDocument();
+  });
+
+  it('opens the table once a game starts', () => {
+    savePlayerId('p-1');
+    renderAt('/tables/k7qx2m/play');
+    expect(screen.getByRole('heading', { name: 'Table K7QX2M' })).toBeInTheDocument();
   });
 
   it('sends visitors without a player away from the lobby', () => {
