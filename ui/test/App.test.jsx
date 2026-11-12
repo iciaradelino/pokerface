@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { App } from '../src/App.jsx';
@@ -12,7 +12,17 @@ function renderAt(path) {
   );
 }
 
-afterEach(() => clearPlayerId());
+// Pages load data on mount; no service is running in these tests.
+beforeEach(() =>
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(null, { status: 503 })),
+  ),
+);
+afterEach(() => {
+  vi.unstubAllGlobals();
+  clearPlayerId();
+});
 
 describe('App routes', () => {
   it('asks a new visitor to create a player', () => {
@@ -23,7 +33,13 @@ describe('App routes', () => {
   it('sends a returning player to the lobby', () => {
     savePlayerId('p-1');
     renderAt('/');
-    expect(screen.getByRole('heading', { name: 'Lobby' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ready to play?' })).toBeInTheDocument();
+  });
+
+  it('opens the waiting room for a table code', () => {
+    savePlayerId('p-1');
+    renderAt('/tables/k7qx2m');
+    expect(screen.getByText('K7QX2M')).toBeInTheDocument();
   });
 
   it('sends visitors without a player away from the lobby', () => {

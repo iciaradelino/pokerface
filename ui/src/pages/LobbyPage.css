@@ -1,0 +1,363 @@
+.lobby {
+  min-height: 100vh;
+}
+
+/* ---------- Top bar ---------- */
+
+.lobby__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.lobby__me {
+  gap: var(--space-3);
+}
+
+.lobby__chip-dot {
+  width: 14px;
+  height: 14px;
+  border: 2px dashed var(--color-chip-edge);
+  border-radius: 50%;
+  background: var(--color-chip);
+}
+
+/* ---------- Layout ---------- */
+
+.lobby__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-8) var(--space-12);
+}
+
+.lobby__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lobby__intro h1 {
+  font-size: var(--text-page-title);
+}
+
+/* Start and Join side by side, with you and the leaderboard in a column on the right */
+.lobby__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(280px, 0.8fr);
+  align-items: start;
+  gap: var(--column-gap);
+}
+
+.lobby__start,
+.lobby__join {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 100%;
+}
+
+.lobby__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--column-gap);
+  grid-row: span 2;
+}
+
+.lobby__small-label {
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.lobby__error {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--color-negative);
+}
+
+/* ---------- Start a table (teal) ---------- */
+
+.lobby__start {
+  position: relative;
+  overflow: hidden;
+}
+
+/* The ring in the corner of the design */
+.lobby__start::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -60px;
+  width: 180px;
+  height: 180px;
+  border: 22px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.lobby__start > * {
+  position: relative;
+  z-index: 1;
+}
+
+.lobby__on-teal {
+  color: var(--color-on-teal-2);
+}
+
+.lobby__fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.lobby__fieldset legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+
+.lobby__blinds {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.lobby__blind {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--height-pill);
+  padding: 0 var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-small);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.lobby__blind:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lobby__blind:has(input:checked) {
+  border-color: var(--color-lime);
+  background: var(--color-lime);
+  color: var(--color-on-lime);
+}
+
+.lobby__blind:has(input:focus-visible) {
+  outline: 3px solid var(--color-lime);
+  outline-offset: 3px;
+}
+
+.lobby__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.lobby__facts dd {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-section);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lobby__error--on-teal {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-danger-bg);
+  color: var(--color-ink);
+}
+
+/* ---------- Join with a code ---------- */
+
+.lobby__code {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-2);
+  max-width: 360px;
+  cursor: text;
+}
+
+.lobby__code-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 5;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface-2);
+  font-family: var(--font-display);
+  font-size: var(--text-section-lg);
+  font-weight: 700;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.lobby__code-cell--filled {
+  border-color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+.lobby__code-cell--active {
+  border-color: var(--color-lime);
+  box-shadow: 0 0 0 3px var(--color-lime-soft);
+}
+
+.lobby__code-cell--invalid {
+  border-color: var(--color-negative);
+}
+
+/* Covers the boxes so clicks, typing and pasting go to the input; the boxes show the text. */
+.lobby__code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px; /* no zoom on iOS */
+  opacity: 0;
+}
+
+/* ---------- You ---------- */
+
+.lobby__profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.lobby__profile-name {
+  font-weight: 700;
+  font-size: var(--text-body-lg);
+}
+
+.lobby__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.lobby__stat-lime {
+  color: var(--color-lime);
+}
+
+/* ---------- Leaderboard ---------- */
+
+.lobby__board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.lobby__board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.lobby__board-head h2 {
+  font-size: var(--text-section);
+}
+
+.lobby__board-head span {
+  white-space: nowrap;
+}
+
+.lobby__board-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lobby__board-row {
+  display: grid;
+  grid-template-columns: 20px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-input);
+}
+
+.lobby__board-row--me {
+  background: var(--color-lime-soft);
+}
+
+.lobby__board-rank {
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.lobby__board-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby__board-chips {
+  font-weight: 700;
+}
+
+/* ---------- Smaller screens ---------- */
+
+@media (max-width: 1100px) {
+  .lobby__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .lobby__side {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .lobby__bar {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  /* Only the avatar stays in the bar; the chips are on the profile card */
+  .lobby__me .pill {
+    display: none;
+  }
+
+  .lobby__main {
+    padding: var(--space-6) var(--space-4) var(--space-10);
+  }
+
+  .lobby__intro h1 {
+    font-size: var(--text-section-lg);
+  }
+
+  .lobby__grid,
+  .lobby__side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

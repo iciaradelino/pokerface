@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { CreatePlayerPage } from './pages/CreatePlayerPage.jsx';
 import { LobbyPage } from './pages/LobbyPage.jsx';
 import { NotFoundPage } from './pages/NotFoundPage.jsx';
+import { WaitingRoomPage } from './pages/WaitingRoomPage.jsx';
 import { getPlayerId } from './player.js';
 
 /** Pages that need a player send you to "Create your player" first. */
@@ -22,6 +23,14 @@ export function App() {
         element={
           <RequirePlayer>
             <LobbyPage />
+          </RequirePlayer>
+        }
+      />
+      <Route
+        path="/tables/:code"
+        element={
+          <RequirePlayer>
+            <WaitingRoomPage />
           </RequirePlayer>
         }
       />
