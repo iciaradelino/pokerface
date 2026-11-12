@@ -6,9 +6,9 @@ import { playersApi } from '../api/playersApi.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { formatChips } from '../components/Chips.jsx';
-import { Logo } from '../components/Logo.jsx';
-import { clearPlayerId, getPlayerId } from '../player.js';
+import { TopBar } from '../components/TopBar.jsx';
 import { CODE_LENGTH, isCompleteCode, normalizeCode } from '../tableCode.js';
+import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import './LobbyPage.css';
 
 // Blind levels offered when starting a table. Every table starts with the service defaults:
@@ -21,35 +21,13 @@ export const BLINDS = [
 const STARTING_STACK = 1000;
 const MAX_SEATS = 6;
 
-const isPlayerGone = (err) =>
-  err instanceof ApiError && err.status === 404 && err.message === 'Player not found';
-
 export function LobbyPage() {
   const navigate = useNavigate();
-  const playerId = getPlayerId();
-
-  const [player, setPlayer] = useState(null);
-  const [playerUnavailable, setPlayerUnavailable] = useState(false);
+  const { playerId, player, unavailable: playerUnavailable, startOver } = usePlayer();
   const [board, setBoard] = useState({ status: 'loading', rows: [] });
-
-  // A player deleted on the server (or an old id on this device) starts over.
-  function startOver() {
-    clearPlayerId();
-    navigate('/', { replace: true });
-  }
 
   useEffect(() => {
     let active = true;
-    playersApi
-      .get(playerId)
-      .then((data) => active && setPlayer(data))
-      .catch((err) => {
-        if (!active) return;
-        if (isPlayerGone(err)) {
-          clearPlayerId();
-          navigate('/', { replace: true });
-        } else setPlayerUnavailable(true);
-      });
     playersApi
       .leaderboard()
       .then((rows) => active && setBoard({ status: 'ready', rows }))
@@ -57,25 +35,14 @@ export function LobbyPage() {
     return () => {
       active = false;
     };
-  }, [playerId, navigate]);
+  }, []);
 
   const rankIndex = board.rows.findIndex((row) => row.id === playerId);
   const rank = rankIndex === -1 ? null : rankIndex + 1;
 
   return (
     <div className="lobby">
-      <header className="lobby__bar">
-        <Logo />
-        {player && (
-          <div className="row lobby__me">
-            <span className="pill pill--quiet tabular">
-              <span className="lobby__chip-dot" aria-hidden="true" />
-              {formatChips(player.chips)} <span className="muted">play chips</span>
-            </span>
-            <Avatar name={player.name} colourKey={player.avatar} />
-          </div>
-        )}
-      </header>
+      <TopBar player={player} />
 
       <main className="lobby__main">
         <div className="lobby__intro">
