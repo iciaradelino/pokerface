@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { CreatePlayerPage } from './pages/CreatePlayerPage.jsx';
 import { LobbyPage } from './pages/LobbyPage.jsx';
 import { NotFoundPage } from './pages/NotFoundPage.jsx';
+import { TablePage } from './pages/TablePage.jsx';
 import { WaitingRoomPage } from './pages/WaitingRoomPage.jsx';
 import { getPlayerId } from './player.js';
 
@@ -31,6 +32,14 @@ export function App() {
         element={
           <RequirePlayer>
             <WaitingRoomPage />
+          </RequirePlayer>
+        }
+      />
+      <Route
+        path="/tables/:code/play"
+        element={
+          <RequirePlayer>
+            <TablePage />
           </RequirePlayer>
         }
       />
