@@ -45,6 +45,37 @@ action cannot leave the table half-updated: keep the old value and report the er
 `table` contains the deck and everyone's hole cards. **Never send it to a client or log it.**
 Send `viewTable(table, viewerId)`; pass `null` for a spectator.
 
+## Messages in the plan's format (plan.md §6)
+
+`messages.js` translates between the engine and the formats in `plan.md` §6:
+
+```js
+import { act, toEngineAction, publicState, privateState, handResults, httpStatusFor,
+         EngineError } from './engine/index.js';
+
+// POST /tables/:id/actions  { playerId, action: "check"|"call"|"fold"|"raise"|"allin", amount? }
+try {
+  table = act(table, body.playerId, toEngineAction(body));
+} catch (err) {
+  if (!(err instanceof EngineError)) throw err;
+  return res.status(httpStatusFor(err)).json({ code: err.code, message: err.message });
+}
+
+// After every change: one "state" to everyone, one "private" to each player
+broadcast(publicState(table, { timerEndsAt }));
+for (const id of seatedPlayers) sendTo(id, privateState(table, id));
+
+// When a hand ends: POST /players/:playerId/results with body { handId, delta }
+for (const { playerId, body } of handResults(table, tableId)) await playersClient.saveResult(playerId, body);
+```
+
+**`amount` means "raise to"**: the total bet on this street after the raise, not the chips
+added. `minRaise` and `maxRaise` use the same meaning.
+
+- `stage`: `waiting`, `preflop`, `flop`, `turn`, `river`, `complete`.
+- `seats[].status`: `active`, `folded`, `allin`, `waiting` (not in this hand), `out` (no chips).
+- `result` (only when `stage` is `complete`): winners, amounts, hand names and cards shown.
+- Additions to §6: `seat`, `handNumber`, `result` and `toCall`.
 ## Cards
 
 Two-character strings: rank (`2`–`9`, `T`, `J`, `Q`, `K`, `A`) + suit (`c`, `d`, `h`, `s`).

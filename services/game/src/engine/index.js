@@ -32,3 +32,10 @@ export { evaluateBest, evaluateFive, compareScores, Category } from './evaluator
 export { buildPots, awardPots } from './pots.js';
 export { createDeck, shuffle, isValidCard, RANKS, SUITS } from './cards.js';
 export { secureRandomInt, seededRandomInt } from './random.js';
+export {
+  toEngineAction,
+  publicState,
+  privateState,
+  handResults,
+  httpStatusFor,
+} from './messages.js';
