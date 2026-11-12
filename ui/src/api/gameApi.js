@@ -1,4 +1,4 @@
-// Game service (owner: Lara). Endpoints from plan.md §1 and §6.
+// Game service (owner: Lara). Endpoints from plan.md §1 and §6 and services/game/src/app.js.
 // Live table state arrives over the WebSocket; actions go over HTTP.
 import { config } from '../config.js';
 import { request } from './http.js';
@@ -7,9 +7,17 @@ const game = (path, options) => request('game', config.gameUrl, path, options);
 const table = (id) => `/tables/${encodeURIComponent(id)}`;
 
 export const gameApi = {
-  createTable: (settings) => game('/tables', { method: 'POST', body: settings }),
+  /**
+   * settings (all optional): { smallBlind, bigBlind, startingStack, maxSeats }. Defaults are
+   * 5/10 blinds, 1000 chips, 6 seats. Returns the table; its `id` is the 6-character join code.
+   */
+  createTable: (playerId, settings = {}) =>
+    game('/tables', { method: 'POST', body: { playerId, ...settings } }),
   getTable: (id) => game(table(id)),
-  deleteTable: (id) => game(table(id), { method: 'DELETE' }),
+  /** Only the player who created the table may delete it. */
+  deleteTable: (id, playerId) =>
+    game(`${table(id)}?playerId=${encodeURIComponent(playerId)}`, { method: 'DELETE' }),
+  /** Joining again returns the same seat with alreadySeated: true. 409 TABLE_FULL when full. */
   join: (id, playerId) => game(`${table(id)}/join`, { method: 'POST', body: { playerId } }),
   /** action: check | call | fold | raise | allin. A 409 means illegal or not your turn. */
   act: (id, playerId, action, amount) =>
