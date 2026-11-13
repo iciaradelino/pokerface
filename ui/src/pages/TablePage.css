@@ -1,0 +1,386 @@
+.table-page {
+  min-height: 100vh;
+}
+
+/* ---------- Top bar: table info on the left, Leave table on the right ---------- */
+
+.table-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.table-bar__info {
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.table-bar__title {
+  margin-right: var(--space-2);
+  font-weight: 700;
+  font-size: var(--text-small);
+}
+
+.table-page__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--content-max-table);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-8) var(--space-10);
+}
+
+/* ---------- The felt ---------- */
+
+/* Room around the oval for the seats that sit on its edge */
+.felt-wrap {
+  padding: 60px 90px 96px;
+}
+
+.felt {
+  position: relative;
+  aspect-ratio: 2.1 / 1;
+  /* Small enough that the action bar stays on screen on a laptop */
+  max-width: min(900px, (100vh - 360px) * 2.1);
+  min-width: 0;
+  margin: 0 auto;
+  border: 18px solid var(--color-table-edge);
+  border-radius: 999px;
+  background: radial-gradient(
+    ellipse at center,
+    var(--color-teal-line) -40%,
+    var(--color-teal) 60%
+  );
+  box-shadow: var(--shadow-table);
+}
+
+.felt__brand {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.18);
+}
+
+.felt__centre {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  transform: translate(-50%, -58%);
+}
+
+.felt__board {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.felt__waiting {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: rgba(15, 26, 20, 0.35);
+  color: #ffffff;
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.felt__result {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-input);
+  background: var(--color-dark-card);
+  color: var(--color-on-dark);
+  font-size: var(--text-small);
+  text-align: center;
+}
+
+.felt__result strong {
+  color: var(--color-lime);
+}
+
+/* ---------- Seats ---------- */
+
+.seat {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 150px;
+  transform: translate(-50%, -50%);
+}
+
+.seat__tile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 3px solid var(--seat-colour);
+  border-radius: var(--radius-tile);
+  background: var(--color-tile-bg);
+  box-shadow: var(--shadow-panel);
+}
+
+.seat--me {
+  width: 170px;
+}
+
+.seat--acting .seat__tile {
+  box-shadow:
+    0 0 0 4px var(--color-lime),
+    0 0 24px rgba(184, 242, 58, 0.6);
+}
+
+.seat--folded .seat__tile {
+  opacity: 0.55;
+}
+
+.seat__silhouette {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--seat-colour);
+}
+
+.seat__strip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-name-strip);
+  color: #ffffff;
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+
+.seat__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat__dealer {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+}
+
+.seat__note {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-dark-card);
+  color: var(--color-on-dark);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.seat--acting .seat__note {
+  background: var(--color-lime);
+  color: var(--color-on-lime);
+}
+
+/* Revealed cards above a tile; your own cards are bigger and overlap the felt */
+.seat__cards {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: calc(-1 * var(--space-6));
+  z-index: 1;
+}
+
+.seat__cards--mine {
+  margin-bottom: calc(-1 * var(--space-8));
+}
+
+.seat__bet {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+}
+
+.seat--empty {
+  justify-content: center;
+  gap: var(--space-2);
+  aspect-ratio: 4 / 3;
+  border: 2px dashed var(--color-teal-line);
+  border-radius: var(--radius-tile);
+  background: var(--color-surface);
+  opacity: 0.92;
+}
+
+.seat__empty-title {
+  color: var(--color-ink);
+  font-size: var(--text-small);
+  font-weight: 700;
+}
+
+.seat__invite {
+  min-height: var(--height-quick-bet);
+  padding: 0 var(--space-3);
+  font-size: var(--text-caption);
+}
+
+/* ---------- Action bar ---------- */
+
+.action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(100%, 860px);
+  margin: 0 auto;
+}
+
+.action-bar__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4) var(--space-8);
+}
+
+.action-bar__heading {
+  font-size: var(--text-caption);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.action-bar__heading--turn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-positive);
+}
+
+.action-bar__heading--turn::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-lime);
+}
+
+.action-bar__raise {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 260px;
+}
+
+.action-bar__raise .pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-bar__slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.action-bar__slider label {
+  white-space: nowrap;
+}
+
+.action-bar__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.action-bar__buttons .btn {
+  min-width: 110px;
+}
+
+/* ---------- Smaller screens ---------- */
+
+@media (max-width: 1100px) {
+  .seat {
+    width: 120px;
+  }
+
+  .seat--me {
+    width: 140px;
+  }
+
+  .felt__board .playing-card {
+    --card-w: 44px;
+  }
+}
+
+@media (max-width: 760px) {
+  .table-bar {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .table-bar__title {
+    display: none;
+  }
+
+  .table-page__main {
+    padding: var(--space-4) var(--space-3) var(--space-8);
+  }
+
+  .felt-wrap {
+    padding: 56px 34px 96px;
+  }
+
+  .felt {
+    aspect-ratio: 1 / 1.25;
+    border-width: 12px;
+    border-radius: 140px;
+  }
+
+  .seat {
+    width: 84px;
+  }
+
+  .seat--me {
+    width: 104px;
+  }
+
+  .seat__strip {
+    padding: 2px var(--space-2);
+    font-size: 10px;
+  }
+
+  /* No room for empty seats on a phone; the code is in the top bar */
+  .seat--empty {
+    display: none;
+  }
+
+  .felt__board {
+    gap: var(--space-1);
+  }
+
+  .felt__board .playing-card {
+    --card-w: 36px;
+  }
+
+  .seat__cards--mine .playing-card {
+    --card-w: 52px;
+  }
+
+  .action-bar__buttons .btn {
+    flex: 1 1 calc(50% - var(--space-3));
+    min-width: 0;
+  }
+}
