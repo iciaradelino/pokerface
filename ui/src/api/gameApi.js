@@ -19,10 +19,17 @@ export const gameApi = {
     game(`${table(id)}?playerId=${encodeURIComponent(playerId)}`, { method: 'DELETE' }),
   /** Joining again returns the same seat with alreadySeated: true. 409 TABLE_FULL when full. */
   join: (id, playerId) => game(`${table(id)}/join`, { method: 'POST', body: { playerId } }),
-  /** action: check | call | fold | raise | allin. A 409 means illegal or not your turn. */
+  /**
+   * action: check | call | fold | raise | allin. For raise, amount is the total bet on this
+   * street ("raise to"). 400 for a malformed action, 409 if illegal or not your turn.
+   */
   act: (id, playerId, action, amount) =>
     game(`${table(id)}/actions`, { method: 'POST', body: { playerId, action, amount } }),
   health: () => game('/health'),
-  /** WebSocket URL for live state: http(s) → ws(s). */
-  socketUrl: (id) => `${config.gameUrl.replace(/^http/, 'ws')}${table(id)}/ws`,
+  /**
+   * WebSocket URL for live state: http(s) → ws(s). playerId says whose private messages
+   * (hole cards, legal actions) to send; to be confirmed with Lara.
+   */
+  socketUrl: (id, playerId) =>
+    `${config.gameUrl.replace(/^http/, 'ws')}${table(id)}/ws?playerId=${encodeURIComponent(playerId)}`,
 };
