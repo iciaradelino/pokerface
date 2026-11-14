@@ -12,6 +12,7 @@ function toTable(row, seatRows) {
     bigBlind: row.big_blind,
     startingStack: row.starting_stack,
     maxSeats: row.max_seats,
+    paused: row.paused,
     createdBy: row.created_by.toLowerCase(),
     createdAt: row.created_at.toISOString(),
     seats: seatRows.map((seat) => ({
@@ -42,7 +43,7 @@ export function createTablesRepository(pool) {
     const tables = await pool
       .request()
       .input('id', sql.Char(6), id)
-      .query(`SELECT id, small_blind, big_blind, starting_stack, max_seats, created_by, created_at
+      .query(`SELECT id, small_blind, big_blind, starting_stack, max_seats, paused, created_by, created_at
               FROM dbo.tables WHERE id = @id`);
     if (!tables.recordset[0]) return null;
     const seats = await pool
@@ -126,6 +127,70 @@ export function createTablesRepository(pool) {
                   VALUES (@id, @seatIndex, @playerId, @name, @stack)`);
         return { status: 'joined', seatIndex };
       });
+    },
+
+    /** Number of the last finished hand at this table, or 0 if none has been played. */
+    async getLastHandNumber(id) {
+      const result = await pool
+        .request()
+        .input('id', sql.Char(6), id)
+        .query('SELECT ISNULL(MAX(hand_number), 0) AS last FROM dbo.hands WHERE table_id = @id');
+      return result.recordset[0].last;
+    },
+
+    // Saves a finished hand in one transaction: the hand, each player's result (sent_at NULL, so
+    // the players service still has to receive it), the new stacks, and removes the seats of
+    // players who left during the hand. Saving the same handId twice changes nothing, so a retry
+    // after a lost response is safe.
+    async saveHand(id, { handId, handNumber, result, deltas, stacks }) {
+      await inTransaction(pool, (transaction) =>
+        transaction
+          .request()
+          .input('id', sql.Char(6), id)
+          .input('handId', sql.UniqueIdentifier, handId)
+          .input('handNumber', sql.Int, handNumber)
+          .input('result', sql.NVarChar(sql.MAX), JSON.stringify(result))
+          .input('deltas', sql.NVarChar(sql.MAX), JSON.stringify(deltas))
+          .input('stacks', sql.NVarChar(sql.MAX), JSON.stringify(stacks)).query(`
+            IF NOT EXISTS (SELECT 1 FROM dbo.hands WHERE id = @handId)
+            BEGIN
+              INSERT INTO dbo.hands (id, table_id, hand_number, result)
+              VALUES (@handId, @id, @handNumber, @result);
+              INSERT INTO dbo.hand_players (hand_id, player_id, delta)
+              SELECT @handId, playerId, delta
+              FROM OPENJSON(@deltas) WITH (playerId UNIQUEIDENTIFIER, delta INT);
+            END;
+            UPDATE s SET stack = j.stack
+            FROM dbo.seats AS s
+            JOIN OPENJSON(@stacks) WITH (playerId UNIQUEIDENTIFIER, stack INT) AS j
+              ON s.player_id = j.playerId
+            WHERE s.table_id = @id;
+            DELETE FROM dbo.seats
+            WHERE table_id = @id
+              AND player_id NOT IN (
+                SELECT playerId FROM OPENJSON(@stacks) WITH (playerId UNIQUEIDENTIFIER)
+              );`),
+      );
+    },
+
+    /** Frees a seat. Returns false if the player was not seated there. */
+    async removeSeat(id, playerId) {
+      const result = await pool
+        .request()
+        .input('id', sql.Char(6), id)
+        .input('playerId', sql.UniqueIdentifier, playerId)
+        .query('DELETE FROM dbo.seats WHERE table_id = @id AND player_id = @playerId');
+      return result.rowsAffected[0] > 0;
+    },
+
+    /** Returns false if the table does not exist. */
+    async setPaused(id, paused) {
+      const result = await pool
+        .request()
+        .input('id', sql.Char(6), id)
+        .input('paused', sql.Bit, paused)
+        .query('UPDATE dbo.tables SET paused = @paused WHERE id = @id');
+      return result.rowsAffected[0] > 0;
     },
 
     /** Deletes the table; its seats and hands go with it. Returns false if it did not exist. */
