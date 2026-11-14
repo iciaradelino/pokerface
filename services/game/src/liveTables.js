@@ -1,9 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { isHandInProgress, standUp, sitDown, startNextHand } from './engine/index.js';
+import {
+  act,
+  actOnTimeout,
+  isHandInProgress,
+  playerToAct,
+  privateState,
+  publicState,
+  sitDown,
+  standUp,
+  startNextHand,
+  toEngineAction,
+} from './engine/index.js';
 import { restoreEngineTable } from './engineRestore.js';
 
 export const HAND_PAUSE_MS = 5000;
 export const SAVE_RETRY_MS = 3000;
+export const TURN_MS = 120_000;
 
 /**
  * The tables being played, kept in memory with their poker engine state (max 1 replica, so one
@@ -17,11 +29,16 @@ export const SAVE_RETRY_MS = 3000;
  *   join:   'joined' | 'already_seated' | 'full' | 'not_found'   (+ seatIndex)
  *   leave:  'left' | 'leaving' (at the end of the current hand) | 'not_seated' | 'not_found'
  *   remove: 'deleted' | 'hand_in_progress' | 'not_found'
+ *   act:    'ok' (+ state, private) | 'not_found'; a rule violation throws the engine's EngineError
+ *
+ * Each player has `turnMs` to act. When the time runs out the engine checks for them if it can,
+ * otherwise folds them, so a player who walks away never blocks the table.
  */
 export function createLiveTables({
   tables,
   handPauseMs = HAND_PAUSE_MS,
   saveRetryMs = SAVE_RETRY_MS,
+  turnMs = TURN_MS,
   generateHandId = randomUUID,
   dealOptions = () => ({}),
   onChange = () => {},
@@ -60,6 +77,7 @@ export function createLiveTables({
       pendingHandId: null,
       nextHandTimer: null,
       retryTimer: null,
+      turn: null, // { handNumber, playerId, endsAt, timer } for the player whose turn it is
     };
     live.set(id, entry);
     scheduleNextHand(entry);
@@ -89,10 +107,38 @@ export function createLiveTables({
     await afterChange(entry);
   }
 
+  // Starts the turn timer when the turn passes to someone else. A change that keeps the same
+  // player to act (e.g. someone joining mid-hand) leaves their timer running.
+  function updateTurnTimer(entry) {
+    const playerId = playerToAct(entry.game);
+    const handNumber = entry.game.handNumber;
+    if (entry.turn && entry.turn.playerId === playerId && entry.turn.handNumber === handNumber) return;
+    clearTimeout(entry.turn?.timer);
+    entry.turn = null;
+    if (playerId === null) return;
+    const timer = setTimeout(() => {
+      run(entry.id, () => timeOut(entry, handNumber, playerId)).catch(() => {});
+    }, turnMs);
+    entry.turn = { handNumber, playerId, endsAt: new Date(Date.now() + turnMs).toISOString(), timer };
+  }
+
+  async function timeOut(entry, handNumber, playerId) {
+    if (!isCurrent(entry) || playerToAct(entry.game) !== playerId) return;
+    if (entry.game.handNumber !== handNumber) return;
+    entry.game = actOnTimeout(entry.game);
+    log('turn_timed_out', { tableId: entry.id, handNumber });
+    await afterChange(entry);
+  }
+
+  // What the players see: the "state" message for everyone and the "private" one for a player.
+  const timerEndsAt = (entry) => entry.turn?.endsAt ?? null;
+  const stateOf = (entry) => publicState(entry.game, { timerEndsAt: timerEndsAt(entry) });
+
   // Called after every change to the engine state: tells the listeners (the WebSocket), saves a
   // hand that just ended, or schedules the next one.
   async function afterChange(entry) {
-    onChange(entry.id, entry.game);
+    updateTurnTimer(entry);
+    onChange(entry.id, entry.game, { timerEndsAt: timerEndsAt(entry) });
     if (unsaved(entry)) await saveHand(entry);
     else scheduleNextHand(entry);
   }
@@ -135,6 +181,7 @@ export function createLiveTables({
   }
 
   function forget(entry) {
+    clearTimeout(entry.turn?.timer);
     clearTimeout(entry.nextHandTimer);
     clearTimeout(entry.retryTimer);
     live.delete(entry.id);
@@ -143,6 +190,27 @@ export function createLiveTables({
   return {
     /** The engine state of a table, loading it if needed, or null if it does not exist. */
     get: (id) => run(id, async () => (await load(id))?.game ?? null),
+
+    /** The "state" message for everyone and the "private" one for a player, or null. */
+    view: (id, playerId) =>
+      run(id, async () => {
+        const entry = await load(id);
+        if (!entry) return null;
+        return { state: stateOf(entry), private: privateState(entry.game, playerId) };
+      }),
+
+    /**
+     * A player acts: { action: check | call | fold | raise | allin, amount? }, where amount is
+     * the "raise to" total. Throws the engine's EngineError for anything against the rules.
+     */
+    act: (id, playerId, body) =>
+      run(id, async () => {
+        const entry = await load(id);
+        if (!entry) return { status: 'not_found' };
+        entry.game = act(entry.game, playerId, toEngineAction(body));
+        await afterChange(entry);
+        return { status: 'ok', state: stateOf(entry), private: privateState(entry.game, playerId) };
+      }),
 
     /** Seats the player in the database and in the engine. Mid-hand, they play from the next hand. */
     join: (id, { playerId, playerName }) =>
