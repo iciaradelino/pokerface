@@ -97,6 +97,6 @@ describe('API paths', () => {
     const fetch = mockFetch(async () => jsonResponse(200, {}));
     await gameApi.join('a/b', 'p1');
     expect(fetch.mock.calls[0][0]).toBe('http://localhost:3002/tables/a%2Fb/join');
-    expect(gameApi.socketUrl('t1')).toBe('ws://localhost:3002/tables/t1/ws');
+    expect(gameApi.socketUrl('t1', 'p 1')).toBe('ws://localhost:3002/tables/t1/ws?playerId=p%201');
   });
 });
