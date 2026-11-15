@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { App } from '../src/App.jsx';
 import { clearPlayerId, savePlayerId } from '../src/player.js';
+import { FakeSocket } from './fakeSocket.js';
 
 function renderAt(path) {
   return render(
@@ -13,12 +14,13 @@ function renderAt(path) {
 }
 
 // Pages load data on mount; no service is running in these tests.
-beforeEach(() =>
+beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => new Response(null, { status: 503 })),
-  ),
-);
+  );
+  vi.stubGlobal('WebSocket', FakeSocket);
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   clearPlayerId();
@@ -46,7 +48,8 @@ describe('App routes', () => {
   it('opens the table once a game starts', () => {
     savePlayerId('p-1');
     renderAt('/tables/k7qx2m/play');
-    expect(screen.getByRole('heading', { name: 'Table K7QX2M' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Leave table' })).toBeInTheDocument();
+    expect(screen.getByText('Code K7QX2M')).toBeInTheDocument();
   });
 
   it('sends visitors without a player away from the lobby', () => {
