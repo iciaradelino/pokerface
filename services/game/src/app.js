@@ -16,6 +16,7 @@ function sendError(response, status, code, message) {
 export function createApp({
   checkDatabase,
   tables,
+  live,
   players,
   generateId = generateTableId,
   version = 'local',
@@ -117,7 +118,7 @@ export function createApp({
     const player = await players.getPlayer(playerId);
     if (!player) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
 
-    const result = await tables.joinTable(request.tableId, { playerId, playerName: player.name });
+    const result = await live.join(request.tableId, { playerId, playerName: player.name });
     if (result.status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
     if (result.status === 'full') return sendError(response, 409, 'TABLE_FULL', 'This table is full');
     const alreadySeated = result.status === 'already_seated';
@@ -129,17 +130,68 @@ export function createApp({
     });
   })));
 
-  // Only the player who created the table may delete it: DELETE /tables/:id?playerId=...
-  app.delete('/tables/:id', withTableId(route(async (request, response) => {
-    const { playerId } = request.query;
-    if (!isUuid(playerId)) return sendError(response, 400, 'INVALID_INPUT', 'playerId must be a UUID');
-    const table = await tables.getTable(request.tableId);
-    if (!table) return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    if (table.createdBy !== playerId.toLowerCase()) {
-      return sendError(response, 403, 'FORBIDDEN', 'Only the player who created the table can delete it');
+  // Leaving mid-hand folds the player; their seat is freed when the hand ends.
+  app.post('/tables/:id/leave', withTableId(route(async (request, response) => {
+    const { value, error } = validateJoinInput(request.body);
+    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+    const { status } = await live.leave(request.tableId, value.playerId);
+    if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+    if (status === 'not_seated') {
+      return sendError(response, 404, 'NOT_SEATED', 'You are not at this table');
     }
-    const removed = await tables.deleteTable(request.tableId);
-    if (!removed) return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+    if (status === 'leaving') {
+      return response.json({
+        leftNow: false,
+        message: 'You folded and will leave the table when this hand ends',
+      });
+    }
+    response.json({ leftNow: true });
+  })));
+
+  // Only the creator may pause, resume or delete a table. Returns the table, or null after
+  // sending the error.
+  async function creatorTable(request, response, playerId) {
+    if (!isUuid(playerId)) {
+      sendError(response, 400, 'INVALID_INPUT', 'playerId must be a UUID');
+      return null;
+    }
+    const table = await tables.getTable(request.tableId);
+    if (!table) {
+      sendError(response, 404, 'NOT_FOUND', 'Table not found');
+      return null;
+    }
+    if (table.createdBy !== playerId.toLowerCase()) {
+      sendError(response, 403, 'FORBIDDEN', 'Only the player who created the table can do this');
+      return null;
+    }
+    return table;
+  }
+
+  // Pausing lets the current hand finish but starts no new hand until the table is resumed.
+  for (const [path, paused] of [['pause', true], ['resume', false]]) {
+    app.post(`/tables/:id/${path}`, withTableId(route(async (request, response) => {
+      if (!(await creatorTable(request, response, request.body?.playerId))) return;
+      if (!(await live.setPaused(request.tableId, paused))) {
+        return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+      }
+      response.json(await tables.getTable(request.tableId));
+    })));
+  }
+
+  // DELETE /tables/:id?playerId=... Not while a hand is being played: pause the table, let the
+  // hand finish, then delete it.
+  app.delete('/tables/:id', withTableId(route(async (request, response) => {
+    if (!(await creatorTable(request, response, request.query.playerId))) return;
+    const { status } = await live.remove(request.tableId);
+    if (status === 'hand_in_progress') {
+      return sendError(
+        response,
+        409,
+        'HAND_IN_PROGRESS',
+        'Pause the table and let the current hand finish before deleting it',
+      );
+    }
+    if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
     response.status(204).end();
   })));
 

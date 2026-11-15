@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
+import { createLiveTables } from '../src/liveTables.js';
 import { fakePlayersClient, fakeTablesRepository } from './fakes.js';
 
 const ana = '00000000-0000-4000-8000-000000000001';
@@ -10,22 +11,27 @@ const ghost = '00000000-0000-4000-8000-000000000099';
 
 let app;
 let tables;
+let live;
 let players;
 let codes;
 
 beforeEach(() => {
   tables = fakeTablesRepository();
+  live = createLiveTables({ tables, logger: () => {} });
   players = fakePlayersClient({ [ana]: 'Ana', [ben]: 'Ben', [cleo]: 'Cleo' });
   codes = ['K7QX2M', 'P4WN9R'];
   app = createApp({
     checkDatabase: async () => {},
     tables,
+    live,
     players,
     generateId: () => codes.shift(),
     uiOrigin: 'http://localhost:5173',
     logger: () => {},
   });
 });
+
+afterEach(() => live.close());
 
 const createTable = (body = { playerId: ana }) => request(app).post('/tables').send(body);
 

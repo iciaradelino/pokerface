@@ -1,11 +1,15 @@
 import { PlayersUnavailableError } from '../src/playersClient.js';
 
-// In-memory stand-in for tablesRepository.js, with the behaviour the routes rely on.
+// In-memory stand-in for tablesRepository.js, with the behaviour the routes and live tables
+// rely on. `failSaves = n` makes the next n saveHand calls fail, like a paused database.
 export function fakeTablesRepository() {
   const rows = new Map();
-  const copy = (table) => structuredClone(table);
-  return {
+  const hands = []; // every saved hand, in order
+  const copy = (value) => structuredClone(value);
+  const repo = {
     rows,
+    hands,
+    failSaves: 0,
     async getTable(id) {
       return rows.has(id) ? copy(rows.get(id)) : null;
     },
@@ -15,6 +19,7 @@ export function fakeTablesRepository() {
       const table = {
         id,
         ...settings,
+        paused: false,
         createdBy,
         createdAt: '2026-11-11T18:00:00.000Z',
         seats: [{ seatIndex: 0, playerId: createdBy, name: creatorName, stack: settings.startingStack }],
@@ -35,10 +40,37 @@ export function fakeTablesRepository() {
       table.seats.sort((a, b) => a.seatIndex - b.seatIndex);
       return { status: 'joined', seatIndex };
     },
+    async getLastHandNumber(id) {
+      return Math.max(0, ...hands.filter((h) => h.tableId === id).map((h) => h.handNumber));
+    },
+    async saveHand(id, hand) {
+      if (repo.failSaves > 0) {
+        repo.failSaves -= 1;
+        throw new Error('database paused');
+      }
+      if (!hands.some((h) => h.handId === hand.handId)) hands.push({ tableId: id, ...copy(hand) });
+      const table = rows.get(id);
+      const stacks = new Map(hand.stacks.map((s) => [s.playerId, s.stack]));
+      table.seats = table.seats
+        .filter((seat) => stacks.has(seat.playerId))
+        .map((seat) => ({ ...seat, stack: stacks.get(seat.playerId) }));
+    },
+    async removeSeat(id, playerId) {
+      const table = rows.get(id);
+      const before = table.seats.length;
+      table.seats = table.seats.filter((seat) => seat.playerId !== playerId);
+      return table.seats.length < before;
+    },
+    async setPaused(id, paused) {
+      if (!rows.has(id)) return false;
+      rows.get(id).paused = paused;
+      return true;
+    },
     async deleteTable(id) {
       return rows.delete(id);
     },
   };
+  return repo;
 }
 
 // In-memory stand-in for playersClient.js. Set `down = true` to simulate an outage.

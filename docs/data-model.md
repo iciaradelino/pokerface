@@ -87,7 +87,7 @@ Player as returned by the API:
 
 Database `game`, owned by `services/game/`. Owner: Lara.
 
-> The tables below are created by `services/game/migrations/002_tables.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
+> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
 
 ```mermaid
 erDiagram
@@ -100,6 +100,7 @@ erDiagram
         int big_blind
         int starting_stack
         tinyint max_seats
+        bit paused
         uniqueidentifier created_by
         datetime2 created_at
     }
@@ -136,6 +137,7 @@ One row per private table. The settings use the same rules as the poker engine, 
 | `small_blind`, `big_blind` | `INT` | Default 5 and 10. Positive, small blind not above the big blind. |
 | `starting_stack` | `INT` | Chips a player gets when they first sit down. Default 1000, at least one big blind. |
 | `max_seats` | `TINYINT` | 2 to 6, default 6. |
+| `paused` | `BIT` | Set by the creator. While it is 1, the hand being played finishes but no new hand starts. Default 0. |
 | `created_by` | `UNIQUEIDENTIFIER` | Player id from the players service. |
 | `created_at` | `DATETIME2` | UTC. |
 
@@ -183,5 +185,7 @@ The primary key is (`hand_id`, `player_id`). Each row is one call to `POST /play
 
 - **No foreign keys to `players`.** Each service owns its database, so `player_id` is checked by calling `GET /players/:id` when the player joins, not by the database. The name is copied into `seats` so a table keeps working if the players service goes down.
 - **Hands in progress are not stored.** The live state (deck, cards, bets, whose turn it is, the turn timer) lives in memory in the game service. When a hand ends, the service writes the `hands` row, its `hand_players` rows and the new `seats.stack` values in one transaction. If the container scales to zero or restarts, only the hand in progress is lost; tables, seats with their stacks and finished hands are kept.
-- **Sending results.** After saving a hand, the game service sends each `hand_players` row to the players service and sets `sent_at` when it succeeds. Rows the players service did not accept, because it was down or timed out, keep `sent_at` as `NULL` and are sent again after the next hand. The players service ignores a `handId` it has already saved for that player, so a retry never counts twice.
-- **Deleting a table** also deletes its seats, its hands and their `hand_players` rows.
+- **Restoring a table.** After a restart, a table is loaded into memory the first time it is used: the engine gets the saved settings, seats and stacks, and its hand counter continues from the highest `hand_number` of the table, so new hands never clash with `UQ_hands_table_number`.
+- **Saving a hand is safe to repeat.** If the database fails when a hand ends, the table waits and retries with the same `hands.id`, and starts no new hand until it is saved. A hand whose `id` is already stored is not inserted again.
+- **Sending results.** After saving a hand, the game service sends each `hand_players` row to the players service and sets `sent_at` when it succeeds. Rows that failed because the players service was down, timed out or returned a 5xx keep `sent_at` as `NULL` and are sent again after the next hand. A `404` means the player deleted their profile, so the row is marked as sent and not retried. The players service ignores a `handId` it has already saved for that player, so a retry never counts twice.
+- **Deleting a table** also deletes its seats, its hands and their `hand_players` rows. It is refused while a hand is being played or has not been saved yet.
