@@ -2,7 +2,9 @@ import { PlayersUnavailableError } from '../src/playersClient.js';
 
 // In-memory stand-in for tablesRepository.js, with the behaviour the routes and live tables
 // rely on. `failSaves = n` makes the next n saveHand calls fail, like a paused database.
-export function fakeTablesRepository() {
+// The real repository creates tables paused until the creator presses "Start game"; here they
+// start running unless `newTablesPaused` is set, so the hand tests don't need that step.
+export function fakeTablesRepository({ newTablesPaused = false } = {}) {
   const rows = new Map();
   const hands = []; // every saved hand, in order
   const copy = (value) => structuredClone(value);
@@ -19,7 +21,7 @@ export function fakeTablesRepository() {
       const table = {
         id,
         ...settings,
-        paused: false,
+        paused: newTablesPaused,
         createdBy,
         createdAt: '2026-11-11T18:00:00.000Z',
         seats: [{ seatIndex: 0, playerId: createdBy, name: creatorName, stack: settings.startingStack }],

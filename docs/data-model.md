@@ -137,7 +137,7 @@ One row per private table. The settings use the same rules as the poker engine, 
 | `small_blind`, `big_blind` | `INT` | Default 5 and 10. Positive, small blind not above the big blind. |
 | `starting_stack` | `INT` | Chips a player gets when they first sit down. Default 1000, at least one big blind. |
 | `max_seats` | `TINYINT` | 2 to 6, default 6. |
-| `paused` | `BIT` | Set by the creator. While it is 1, the hand being played finishes but no new hand starts. Default 0. |
+| `paused` | `BIT` | 1 while the table waits for its creator to press "Start game", or after they pause it: the hand being played finishes but no new hand starts. New tables are created with 1; starting or resuming sets it to 0. |
 | `created_by` | `UNIQUEIDENTIFIER` | Player id from the players service. |
 | `created_at` | `DATETIME2` | UTC. |
 
