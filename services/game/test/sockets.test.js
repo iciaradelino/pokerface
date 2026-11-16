@@ -123,10 +123,17 @@ describe('connecting', () => {
     expect(ws.messages).toEqual([]);
   });
 
-  it('closes with 1011 when the database is down', async () => {
+  it('closes the socket when the database is down, with a code the UI keeps retrying on', async () => {
     live.close();
     tables.getTable = async () => { throw new Error('down'); };
-    expect((await connect(ana).closed).code).toBe(1011);
+    const ws = connect(ana);
+    const { code } = await ws.closed;
+    // The server closes with 1011. On a busy machine the client can see the connection drop
+    // before that close frame arrives (1006). Either way it is not 4400/4403/4404, so the UI
+    // reconnects, which is what matters while the database is down.
+    expect([1011, 1006]).toContain(code);
+    expect(ws.messages).toEqual([]);
+    expect(logs).toContainEqual(expect.objectContaining({ path: '/tables/K7QX2M/ws', status: 1011 }));
   });
 });
 

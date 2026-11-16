@@ -7,10 +7,12 @@ import { PlayersUnavailableError } from '../src/playersClient.js';
 export function fakeTablesRepository({ newTablesPaused = false } = {}) {
   const rows = new Map();
   const hands = []; // every saved hand, in order
+  const sent = new Set(); // "handId:playerId" of results the players service has
   const copy = (value) => structuredClone(value);
   const repo = {
     rows,
     hands,
+    sent,
     failSaves: 0,
     async getTable(id) {
       return rows.has(id) ? copy(rows.get(id)) : null;
@@ -57,6 +59,15 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
         .filter((seat) => stacks.has(seat.playerId))
         .map((seat) => ({ ...seat, stack: stacks.get(seat.playerId) }));
     },
+    async getUnsentResults(limit) {
+      return hands
+        .flatMap((h) => h.deltas.map((d) => ({ handId: h.handId, playerId: d.playerId, delta: d.delta })))
+        .filter((r) => !sent.has(`${r.handId}:${r.playerId}`))
+        .slice(0, limit);
+    },
+    async markResultSent(handId, playerId) {
+      sent.add(`${handId}:${playerId}`);
+    },
     async removeSeat(id, playerId) {
       const table = rows.get(id);
       const before = table.seats.length;
@@ -76,14 +87,23 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
 }
 
 // In-memory stand-in for playersClient.js. Set `down = true` to simulate an outage.
+// `results` collects every result the players service accepted.
 export function fakePlayersClient(knownPlayers = {}) {
   const client = {
     down: false,
     calls: 0,
+    results: [],
     async getPlayer(id) {
       client.calls += 1;
       if (client.down) throw new PlayersUnavailableError('timeout');
       return knownPlayers[id] ? { id, name: knownPlayers[id] } : null;
+    },
+    async saveResult(id, result) {
+      client.calls += 1;
+      if (client.down) throw new PlayersUnavailableError('timeout');
+      if (!knownPlayers[id]) return 'not_found';
+      client.results.push({ playerId: id, ...result });
+      return 'saved';
     },
   };
   return client;

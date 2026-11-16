@@ -47,3 +47,31 @@ describe('playersClient.getPlayer', () => {
     expect(() => createPlayersClient({ baseUrl: undefined })).toThrow('PLAYERS_URL');
   });
 });
+
+
+describe('playersClient.saveResult', () => {
+  const result = { handId: '11111111-1111-4111-8111-111111111111', delta: -20 };
+
+  it('posts the result as JSON and reports it saved', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(json(200, { id, chips: 980 }));
+    const client = createPlayersClient({ baseUrl: 'http://players:3000', fetchImpl });
+    expect(await client.saveResult(id, result)).toBe('saved');
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBe(`http://players:3000/players/${id}/results`);
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toEqual(result);
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('reports a deleted player', async () => {
+    const client = createPlayersClient({ baseUrl: 'http://players:3000', fetchImpl: async () => json(404, {}) });
+    expect(await client.saveResult(id, result)).toBe('not_found');
+  });
+
+  it('treats a 5xx or a network failure as unavailable', async () => {
+    for (const fetchImpl of [async () => json(503, {}), async () => { throw new TypeError('fetch failed'); }]) {
+      const client = createPlayersClient({ baseUrl: 'http://players:3000', fetchImpl });
+      await expect(client.saveResult(id, result)).rejects.toBeInstanceOf(PlayersUnavailableError);
+    }
+  });
+});

@@ -43,6 +43,7 @@ export function createLiveTables({
   dealOptions = () => ({}),
   onChange = () => {},
   onRemove = () => {},
+  onHandSaved = () => {},
   logger = console.log,
 }) {
   const live = new Map(); // table id -> entry
@@ -178,6 +179,7 @@ export function createLiveTables({
     entry.savedHandNumber = result.handNumber;
     entry.pendingHandId = null;
     log('hand_saved', { tableId: entry.id, handNumber: result.handNumber });
+    onHandSaved(entry.id);
     scheduleNextHand(entry);
   }
 

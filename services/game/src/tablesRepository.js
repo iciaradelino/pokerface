@@ -173,6 +173,33 @@ export function createTablesRepository(pool) {
       );
     },
 
+    /** Hand results the players service has not received yet (oldest hands first). */
+    async getUnsentResults(limit) {
+      const result = await pool
+        .request()
+        .input('limit', sql.Int, limit)
+        .query(`SELECT TOP (@limit) r.hand_id, r.player_id, r.delta
+                FROM dbo.hand_players AS r
+                JOIN dbo.hands AS h ON h.id = r.hand_id
+                WHERE r.sent_at IS NULL
+                ORDER BY h.finished_at`);
+      return result.recordset.map((row) => ({
+        handId: row.hand_id.toLowerCase(),
+        playerId: row.player_id.toLowerCase(),
+        delta: row.delta,
+      }));
+    },
+
+    /** Records that the players service has this result, so it is not sent again. */
+    async markResultSent(handId, playerId) {
+      await pool
+        .request()
+        .input('handId', sql.UniqueIdentifier, handId)
+        .input('playerId', sql.UniqueIdentifier, playerId)
+        .query(`UPDATE dbo.hand_players SET sent_at = SYSUTCDATETIME()
+                WHERE hand_id = @handId AND player_id = @playerId AND sent_at IS NULL`);
+    },
+
     /** Frees a seat. Returns false if the player was not seated there. */
     async removeSeat(id, playerId) {
       const result = await pool

@@ -34,5 +34,21 @@ export function createPlayersClient({ baseUrl, timeoutMs = PLAYERS_TIMEOUT_MS, f
       if (typeof player?.name !== 'string') throw new PlayersUnavailableError('invalid response');
       return player;
     },
+
+    /**
+     * Sends one hand result: POST /players/:id/results { handId, delta }. The players service
+     * ignores a handId it already saved for that player, so a retry never counts twice.
+     * Returns 'saved', or 'not_found' when the player deleted their profile.
+     */
+    async saveResult(id, { handId, delta }) {
+      const response = await call(`/players/${encodeURIComponent(id)}/results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handId, delta }),
+      });
+      if (response.status === 404) return 'not_found';
+      if (!response.ok) throw new PlayersUnavailableError(`status ${response.status}`);
+      return 'saved';
+    },
   };
 }
