@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { EngineError, httpStatusFor } from './engine/index.js';
 import { PlayersUnavailableError } from './playersClient.js';
 import {
   generateTableId,
@@ -128,6 +129,23 @@ export function createApp({
       alreadySeated,
       ...(alreadySeated && { message: 'You are already at this table' }),
     });
+  })));
+
+  // A player acts: { playerId, action: check | call | fold | raise | allin, amount? }. `amount`
+  // is the "raise to" total. Answers with the new state, which the WebSocket also sends.
+  // 400 for a malformed action, 409 when it breaks the rules (not your turn, no hand...).
+  app.post('/tables/:id/actions', withTableId(route(async (request, response) => {
+    const { value, error } = validateJoinInput(request.body);
+    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+    let result;
+    try {
+      result = await live.act(request.tableId, value.playerId, request.body);
+    } catch (engineError) {
+      if (!(engineError instanceof EngineError)) throw engineError;
+      return sendError(response, httpStatusFor(engineError), engineError.code, engineError.message);
+    }
+    if (result.status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+    response.json({ state: result.state, private: result.private });
   })));
 
   // Leaving mid-hand folds the player; their seat is freed when the hand ends.
