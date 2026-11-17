@@ -75,3 +75,14 @@ describe('playersClient.saveResult', () => {
     }
   });
 });
+
+describe('playersClient.saveResult with a refused result', () => {
+  it('reports a 4xx other than 404 as rejected, not unavailable', async () => {
+    const client = createPlayersClient({
+      baseUrl: 'http://players:3000',
+      fetchImpl: async () => json(400, { message: 'delta must be an integer', code: 'INVALID_INPUT' }),
+    });
+    expect(await client.saveResult(id, { handId: '11111111-1111-4111-8111-111111111111', delta: 2e9 }))
+      .toBe('rejected');
+  });
+});

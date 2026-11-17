@@ -13,7 +13,7 @@ export default defineConfig({
     setupFiles: ['./test/setup.js'],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{js,jsx}'],
+      include: ['src/**/*.{js,jsx}', 'video/**/*.{js,jsx}'],
       exclude: ['src/main.jsx'],
       reporter: ['text', 'lcov'],
       thresholds: {

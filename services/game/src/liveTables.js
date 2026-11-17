@@ -26,9 +26,9 @@ export const TURN_MS = 120_000;
  * never interleaves with a hand being saved. Different tables never wait for each other.
  *
  * Statuses returned to the routes:
- *   join:   'joined' | 'already_seated' | 'full' | 'not_found'   (+ seatIndex)
+ *   join:   'joined' | 'already_seated' | 'full' | 'chip_limit' | 'not_found'   (+ seatIndex)
  *   leave:  'left' | 'leaving' (at the end of the current hand) | 'not_seated' | 'not_found'
- *   remove: 'deleted' | 'hand_in_progress' | 'not_found'
+ *   remove: 'deleted' | 'hand_in_progress' | 'results_pending' | 'not_found'
  *   act:    'ok' (+ state, private) | 'not_found'; a rule violation throws the engine's EngineError
  *
  * Each player has `turnMs` to act. When the time runs out the engine checks for them if it can,
@@ -259,13 +259,17 @@ export function createLiveTables({
         return true;
       }),
 
-    /** Deletes the table unless a hand is being played or has not been saved yet. */
+    /**
+     * Deletes the table unless a hand is being played or not saved yet, or one of its results has
+     * not reached the players service: deleting the table would delete those results with it.
+     */
     remove: (id) =>
       run(id, async () => {
         const entry = live.get(id);
         if (entry && (isHandInProgress(entry.game) || unsaved(entry))) {
           return { status: 'hand_in_progress' };
         }
+        if (await tables.hasUnsentResults(id)) return { status: 'results_pending' };
         const deleted = await tables.deleteTable(id);
         if (entry) forget(entry);
         if (deleted) onRemove(id);

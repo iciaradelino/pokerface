@@ -1,4 +1,5 @@
 import { PlayersUnavailableError } from '../src/playersClient.js';
+import { MAX_CHIPS_PER_TABLE } from '../src/validation.js';
 
 // In-memory stand-in for tablesRepository.js, with the behaviour the routes and live tables
 // rely on. `failSaves = n` makes the next n saveHand calls fail, like a paused database.
@@ -8,11 +9,13 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
   const rows = new Map();
   const hands = []; // every saved hand, in order
   const sent = new Set(); // "handId:playerId" of results the players service has
+  const rejected = new Set(); // "handId:playerId" of results it refused for good
   const copy = (value) => structuredClone(value);
   const repo = {
     rows,
     hands,
     sent,
+    rejected,
     failSaves: 0,
     async getTable(id) {
       return rows.has(id) ? copy(rows.get(id)) : null;
@@ -40,6 +43,8 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
       let seatIndex = 0;
       while (seatIndex < table.maxSeats && taken.has(seatIndex)) seatIndex++;
       if (seatIndex === table.maxSeats) return { status: 'full' };
+      const chips = table.seats.reduce((sum, seat) => sum + seat.stack, 0);
+      if (chips + table.startingStack > MAX_CHIPS_PER_TABLE) return { status: 'chip_limit' };
       table.seats.push({ seatIndex, playerId, name: playerName, stack: table.startingStack });
       table.seats.sort((a, b) => a.seatIndex - b.seatIndex);
       return { status: 'joined', seatIndex };
@@ -62,11 +67,18 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
     async getUnsentResults(limit) {
       return hands
         .flatMap((h) => h.deltas.map((d) => ({ handId: h.handId, playerId: d.playerId, delta: d.delta })))
-        .filter((r) => !sent.has(`${r.handId}:${r.playerId}`))
+        .filter((r) => !sent.has(`${r.handId}:${r.playerId}`) && !rejected.has(`${r.handId}:${r.playerId}`))
         .slice(0, limit);
     },
     async markResultSent(handId, playerId) {
       sent.add(`${handId}:${playerId}`);
+    },
+    async markResultRejected(handId, playerId) {
+      rejected.add(`${handId}:${playerId}`);
+    },
+    async hasUnsentResults(id) {
+      const tableHands = new Set(hands.filter((h) => h.tableId === id).map((h) => h.handId));
+      return (await repo.getUnsentResults(Infinity)).some((r) => tableHands.has(r.handId));
     },
     async removeSeat(id, playerId) {
       const table = rows.get(id);
@@ -102,6 +114,7 @@ export function fakePlayersClient(knownPlayers = {}) {
       client.calls += 1;
       if (client.down) throw new PlayersUnavailableError('timeout');
       if (!knownPlayers[id]) return 'not_found';
+      if (Math.abs(result.delta) > 1_000_000_000) return 'rejected'; // As the players service.
       client.results.push({ playerId: id, ...result });
       return 'saved';
     },

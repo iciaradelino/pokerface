@@ -94,13 +94,17 @@ describe('POST /tables/:id/pause and /resume', () => {
 });
 
 describe('DELETE /tables/:id during a hand', () => {
-  it('returns 409 while a hand is being played, and deletes the table between hands', async () => {
+  it('returns 409 while a hand is played or its results are unsent, and deletes the table after', async () => {
     await join(ben);
     await startHand();
     const blocked = await remove(ana);
     expect(blocked.status).toBe(409);
     expect(blocked.body.code).toBe('HAND_IN_PROGRESS');
     await leave(ben); // Ben folds: the hand ends and is saved.
+    const pending = await remove(ana);
+    expect(pending.status).toBe(409);
+    expect(pending.body.code).toBe('RESULTS_PENDING');
+    for (const r of await tables.getUnsentResults(10)) await tables.markResultSent(r.handId, r.playerId);
     expect((await remove(ana)).status).toBe(204);
   });
 });

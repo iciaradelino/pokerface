@@ -136,3 +136,14 @@ describe('rounds', () => {
     live.close();
   });
 });
+
+describe('results the players service refuses for good', () => {
+  it('marks them as rejected and carries on with the rest', async () => {
+    saveHand(hand1, [{ playerId: ana, delta: 1_200_000_000 }, { playerId: ben, delta: -1_200_000_000 }]);
+    saveHand(hand2, [{ playerId: ana, delta: 10 }, { playerId: ben, delta: -10 }]);
+    await sender.sendPending();
+    expect(players.results.map((r) => r.handId)).toEqual([hand2, hand2]);
+    expect(tables.rejected.size).toBe(2);
+    expect(logs).toContainEqual({ level: 'warn', event: 'result_rejected', handId: hand1 });
+  });
+});

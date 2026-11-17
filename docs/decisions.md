@@ -38,3 +38,35 @@ The players service stores profiles and chip balances, records the result of eac
 - Deleting a player deletes their results (`ON DELETE CASCADE`), so their history is lost.
 - There is no real authentication: anyone who knows a player's id can edit or delete that profile. This is accepted for games between friends, as in the plan.
 - Without the index in `003`, six players saving results at the same time made 145 of 150 saves fail with a 503 because of SQL Server deadlocks. With it all 150 succeed. We checked this with a manual load script. The unit tests use an in-memory repository, so they do not run the SQL and do not catch locking problems.
+
+
+## Poker engine (the non-CRUD feature)
+
+**Status:** accepted, 12 November 2026. **Owner:** Olivia. Code and usage are in [services/game/src/engine/README.md](../services/game/src/engine/README.md).
+
+### Context
+
+The core of Pokerface is No-Limit Texas Hold'em for 2 to 6 players. The rules are the most complex logic in the system: betting rounds, minimum raises, all-ins, side and split pots, and ranking hands. A bug here costs players chips. The server knows every player's hole cards, but each player may only see their own. The game service needs at least 70% test coverage on its core logic, and the message formats between the game service and the browser are fixed in `plan.md` §6.
+
+### Decision
+
+- **A pure engine** in `services/game/src/engine/`: plain functions with no Express, database or WebSocket code. Each function takes the table state and returns a new one without changing the input, so a rejected action never leaves a table half-updated.
+- **The server decides.** The browser only sends what the player wants to do (`{ action: "raise", amount: 60 }`). The engine checks it against the legal actions and rejects anything else with a stable error code, such as `NOT_YOUR_TURN` or `INVALID_AMOUNT`.
+- **Our own hand evaluator.** It scores all 21 five-card combinations of a player's seven cards. It is our non-CRUD feature, so we wrote it ourselves to understand and explain it.
+- **Secure shuffling** with Node's `crypto.randomInt` (Fisher-Yates), so the next cards cannot be predicted.
+- **`amount` means "raise to"**: the player's total bet on this street after the raise, not the chips added. The raise slider and the gesture send the same number the player sees.
+- **An adapter for the §6 formats** (`messages.js`, the Adapter pattern). The engine was written before §6 was agreed, so its names and shapes differed: `phase` instead of `stage`, `allIn` instead of `allin`, and one view per player instead of a public `state` plus a `private` message. A small adapter translates in both directions: engine state into the §6 messages, incoming actions into engine actions, finished hands into `POST /players/:id/results` bodies, and engine errors into HTTP status codes (400 for a bad request, 409 for a rule violation).
+
+### Alternatives considered
+
+- **Rules inside the Express routes.** Less code at first, but the rules could only be tested through HTTP, and two routes changing the same table could break each other.
+- **A hand-evaluator library** (e.g. pokersolver). Faster to start, but it would hide the logic we must explain, to save about 100 lines of well-tested code.
+- **Rewriting the engine to match §6** instead of adding an adapter. One file less, but it would have changed working, tested code only to rename fields.
+- **`Math.random` for shuffling.** Simpler, but its output can be predicted.
+
+### Consequences
+
+- The rules are tested without a server or database: unit tests for every rule, fixed decks that deal known cards, and random play of hundreds of hands that checks that chips are never created or lost and that no message ever contains another player's hole cards. Engine coverage is about 96%, which keeps the game service above 70%.
+- Only `messages.js` knows the §6 formats. If they change, one file changes and the engine does not.
+- The table is a plain object in memory, so a hand in progress is lost if the container scales to zero (see the architecture decision).
+- Simplifications for the MVP: the dealer button moves to the next player with chips, and all remaining hands are shown at showdown (no hiding a losing hand).

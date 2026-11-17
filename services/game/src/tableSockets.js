@@ -22,6 +22,9 @@ const MAX_MESSAGE_BYTES = 64 * 1024; // An SDP offer is a few KB.
  * one, and again after every change. Several connections of the same player (two tabs) all get
  * them. The only message a client may send is a video "signal", which is relayed to the player
  * `to` at the same table with `from` set by the server.
+ *
+ * A connection is only "admitted" once the database confirms the player is seated. Until then it
+ * neither sends nor receives anything: no signals, no state.
  */
 export function attachTableSockets({
   server,
@@ -31,7 +34,7 @@ export function attachTableSockets({
   logger = console.log,
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
-  const rooms = new Map(); // table id -> Set of { socket, playerId }
+  const rooms = new Map(); // table id -> Set of { socket, playerId, admitted, alive }
 
   const logLine = (path, status, started) =>
     logger(JSON.stringify({
@@ -42,6 +45,8 @@ export function attachTableSockets({
       status,
       durationMs: Math.round((performance.now() - started) * 100) / 100,
     }));
+
+  const logEvent = (event, fields) => logger(JSON.stringify({ level: 'info', event, ...fields }));
 
   const sendJson = (socket, message) => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
@@ -58,8 +63,10 @@ export function attachTableSockets({
     if (room?.size === 0) rooms.delete(tableId);
   }
 
-  // Relays a video signal to every connection of `to` at the same table.
-  function relay(tableId, from, raw) {
+  // Relays a video signal from an admitted connection to every admitted connection of `to` at
+  // the same table.
+  function relay(tableId, sender, raw) {
+    if (!sender.admitted) return;
     let message;
     try {
       message = JSON.parse(raw);
@@ -69,8 +76,8 @@ export function attachTableSockets({
     if (message?.type !== 'signal' || !isUuid(message.to) || message.data === undefined) return;
     const to = message.to.toLowerCase();
     for (const connection of rooms.get(tableId) ?? []) {
-      if (connection.playerId === to) {
-        sendJson(connection.socket, { type: 'signal', from, to, data: message.data });
+      if (connection.admitted && connection.playerId === to) {
+        sendJson(connection.socket, { type: 'signal', from: sender.playerId, to, data: message.data });
       }
     }
   }
@@ -82,11 +89,13 @@ export function attachTableSockets({
     };
     if (!tableId || !isUuid(playerId)) return refuse(CLOSE.BAD_REQUEST, 'Invalid table code or playerId');
 
-    const connection = { socket, playerId: playerId.toLowerCase(), alive: true };
-    join(tableId, connection); // Joined before reading the state, so no update is missed.
+    // In the room from the start so the heartbeat and cleanup see it, but not admitted: it gets
+    // no state and no signals, and its own signals are dropped, until membership is confirmed.
+    const connection = { socket, playerId: playerId.toLowerCase(), alive: true, admitted: false };
+    join(tableId, connection);
     socket.on('close', () => leave(tableId, connection));
     socket.on('pong', () => { connection.alive = true; });
-    socket.on('message', (data) => relay(tableId, connection.playerId, data.toString()));
+    socket.on('message', (data) => relay(tableId, connection, data.toString()));
 
     let game;
     try {
@@ -103,6 +112,9 @@ export function attachTableSockets({
       leave(tableId, connection);
       return refuse(CLOSE.NOT_SEATED, 'You are not at this table');
     }
+    // Admitted from here. A change that lands before the view below is also in the view, which
+    // is read after it, so the last state the player gets is always the newest.
+    connection.admitted = true;
     const view = await live.view(tableId, connection.playerId);
     sendJson(socket, view.state);
     sendJson(socket, view.private);
@@ -122,6 +134,9 @@ export function attachTableSockets({
       return logLine(url.pathname, 403, started);
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
+      // Without a listener, a socket error (e.g. a message over maxPayload) is thrown and stops
+      // the whole process. ws closes the connection itself (1009 for a message too big).
+      ws.on('error', (error) => logEvent('socket_error', { path: url.pathname, code: error.code ?? 'unknown' }));
       accept(ws, request, normalizeTableId(match[1]), url.searchParams.get('playerId'), url.pathname, started)
         .catch(() => ws.close(1011, 'Tables unavailable'));
     });
@@ -151,6 +166,7 @@ export function attachTableSockets({
       const state = publicState(game, { timerEndsAt });
       const seated = new Set(game.seats.filter((seat) => seat !== null).map((seat) => seat.id));
       for (const connection of [...room]) {
+        if (!connection.admitted) continue; // It gets the full state when admitted.
         if (!seated.has(connection.playerId)) {
           leave(tableId, connection);
           connection.socket.close(CLOSE.NOT_SEATED, 'You left the table');

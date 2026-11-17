@@ -10,6 +10,8 @@ export const RESULTS_BATCH = 50;
  *
  *   200 -> marked as sent
  *   404 -> the player deleted their profile: marked as sent, never retried
+ *   other 4xx -> refused for good (e.g. a delta outside its limits): marked as rejected and
+ *   kept, never retried, so it cannot block the results behind it
  *   timeout, network error or 5xx -> left unsent; the rest of the round stops too, so a players
  *   service that is down is not flooded with requests. The next round tries again.
  *
@@ -35,8 +37,13 @@ export function createResultsSender({
       const rows = await tables.getUnsentResults(batchSize);
       for (const row of rows) {
         const outcome = await players.saveResult(row.playerId, { handId: row.handId, delta: row.delta });
-        await tables.markResultSent(row.handId, row.playerId);
-        if (outcome === 'not_found') log('result_player_gone', { handId: row.handId });
+        if (outcome === 'rejected') {
+          await tables.markResultRejected(row.handId, row.playerId);
+          logger(JSON.stringify({ level: 'warn', event: 'result_rejected', handId: row.handId }));
+        } else {
+          await tables.markResultSent(row.handId, row.playerId);
+          if (outcome === 'not_found') log('result_player_gone', { handId: row.handId });
+        }
         settled += 1;
       }
       if (rows.length < batchSize) return settled;

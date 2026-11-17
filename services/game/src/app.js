@@ -122,6 +122,9 @@ export function createApp({
     const result = await live.join(request.tableId, { playerId, playerName: player.name });
     if (result.status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
     if (result.status === 'full') return sendError(response, 409, 'TABLE_FULL', 'This table is full');
+    if (result.status === 'chip_limit') {
+      return sendError(response, 409, 'TABLE_CHIP_LIMIT', 'This table has reached its chip limit');
+    }
     const alreadySeated = result.status === 'already_seated';
     response.json({
       table: await tables.getTable(request.tableId),
@@ -198,7 +201,8 @@ export function createApp({
   }
 
   // DELETE /tables/:id?playerId=... Not while a hand is being played: pause the table, let the
-  // hand finish, then delete it.
+  // hand finish, then delete it. Not while its results are still on their way to the players
+  // service either, since deleting the table would delete them too.
   app.delete('/tables/:id', withTableId(route(async (request, response) => {
     if (!(await creatorTable(request, response, request.query.playerId))) return;
     const { status } = await live.remove(request.tableId);
@@ -208,6 +212,14 @@ export function createApp({
         409,
         'HAND_IN_PROGRESS',
         'Pause the table and let the current hand finish before deleting it',
+      );
+    }
+    if (status === 'results_pending') {
+      return sendError(
+        response,
+        409,
+        'RESULTS_PENDING',
+        'Results of this table are still being sent to the player service. Try again in a minute',
       );
     }
     if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');

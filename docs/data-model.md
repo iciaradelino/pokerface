@@ -87,7 +87,7 @@ Player as returned by the API:
 
 Database `game`, owned by `services/game/`. Owner: Lara.
 
-> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
+> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql` and `hand_players.rejected_at` added by `004_result_rejected.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
 
 ```mermaid
 erDiagram
@@ -124,6 +124,7 @@ erDiagram
         uniqueidentifier player_id PK
         int delta
         datetime2 sent_at
+        datetime2 rejected_at
     }
 ```
 
@@ -135,7 +136,7 @@ One row per private table. The settings use the same rules as the poker engine, 
 |---|---|---|
 | `id` | `CHAR(6)` | Primary key and join code, e.g. `K7QX2M`. Exactly 6 uppercase letters or digits, checked with a binary collation so lowercase is rejected. The UI uses it in `/tables/:id`. |
 | `small_blind`, `big_blind` | `INT` | Default 5 and 10. Positive, small blind not above the big blind. |
-| `starting_stack` | `INT` | Chips a player gets when they first sit down. Default 1000, at least one big blind. |
+| `starting_stack` | `INT` | Chips a player gets when they first sit down. Default 1000, at least one big blind, and `starting_stack × max_seats` at most 1,000,000,000 (see the chip limit below). |
 | `max_seats` | `TINYINT` | 2 to 6, default 6. |
 | `paused` | `BIT` | 1 while the table waits for its creator to press "Start game", or after they pause it: the hand being played finishes but no new hand starts. New tables are created with 1; starting or resuming sets it to 0. |
 | `created_by` | `UNIQUEIDENTIFIER` | Player id from the players service. |
@@ -178,6 +179,7 @@ One row per player per finished hand.
 | `player_id` | `UNIQUEIDENTIFIER` | Player id from the players service. |
 | `delta` | `INT` | Chips won (positive) or lost (negative) in that hand, as computed by the engine. |
 | `sent_at` | `DATETIME2` | `NULL` until the players service has saved this result. |
+| `rejected_at` | `DATETIME2` | Set if the players service refused this result for good (a 4xx other than 404). The row is kept but no longer sent. |
 
 The primary key is (`hand_id`, `player_id`). Each row is one call to `POST /players/:id/results { handId, delta }`. A filtered index (`IX_hand_players_unsent`) finds the rows whose `sent_at` is still `NULL`, so they can be sent again quickly.
 
@@ -188,4 +190,6 @@ The primary key is (`hand_id`, `player_id`). Each row is one call to `POST /play
 - **Restoring a table.** After a restart, a table is loaded into memory the first time it is used: the engine gets the saved settings, seats and stacks, and its hand counter continues from the highest `hand_number` of the table, so new hands never clash with `UQ_hands_table_number`.
 - **Saving a hand is safe to repeat.** If the database fails when a hand ends, the table waits and retries with the same `hands.id`, and starts no new hand until it is saved. A hand whose `id` is already stored is not inserted again.
 - **Sending results.** After saving a hand, the game service sends each `hand_players` row to the players service and sets `sent_at` when it succeeds. Rows that failed because the players service was down, timed out or returned a 5xx keep `sent_at` as `NULL` and are sent again after the next hand, or within a minute at the latest, so they arrive even if no other hand is played. A `404` means the player deleted their profile, so the row is marked as sent and not retried. The players service ignores a `handId` it has already saved for that player, so a retry never counts twice.
-- **Deleting a table** also deletes its seats, its hands and their `hand_players` rows. It is refused while a hand is being played or has not been saved yet.
+- **Chip limit per table.** A table never holds more than 1,000,000,000 chips in total: `starting_stack × max_seats` must stay within it when the table is created, and a player cannot join if their starting stack would take the table's total over it. Nobody can win more than everyone else at the table has, so no hand result can exceed the players service's limit on `delta` (±1,000,000,000), and every stack fits in an `INT`.
+- **Results refused for good.** If the players service answers a result with a 4xx other than `404` (for example, a `delta` outside its limits), the row gets `rejected_at`, is logged as `result_rejected` and is not sent again, so it cannot hold up the results behind it.
+- **Deleting a table** also deletes its seats, its hands and their `hand_players` rows. It is refused while a hand is being played or has not been saved yet, and while any of its results has not reached the players service (neither sent nor rejected), so deleting a table never loses chips.
