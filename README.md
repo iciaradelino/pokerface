@@ -88,11 +88,11 @@ See the [architecture guide](docs/architecture.md) for code locations, plus our 
 
 | Action    | Gesture                          | Real-table equivalent      |
 |-----------|----------------------------------|----------------------------|
-| Check     | Tap index finger down twice      | Knocking on the table      |
-| Call      | Thumbs up                        | Nod / push chips           |
-| Fold      | Thumbs down                      | Mucking cards              |
-| Raise     | Open palm, raise hand up/down to set amount, fist to confirm | Sliding chips forward |
-| All-in    | Both hands pushed forward        | Pushing the whole stack    |
+| Check     | Tap index finger down twice ✊   | Knocking on the table      |
+| Call      | Thumbs up 👍                     | Nod / push chips           |
+| Fold      | Thumbs down 👎                   | Mucking cards              |
+| Raise     | Open palm, raise hand up/down to set amount, fist to confirm ✋ | Sliding chips forward |
+| All-in    | Thumb, index and little finger out 🤟 | Pushing the whole stack |
 
 - **Confirmation:** a gesture must be held for ~1 s (progress ring on your tile) so accidental movements don't count.
 - **Fallback:** on-screen buttons are always available for accessibility and when detection fails.

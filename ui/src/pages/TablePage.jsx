@@ -11,7 +11,10 @@ import { normalizeCode } from '../tableCode.js';
 import { ActionBar } from '../table/ActionBar.jsx';
 import { STAGE_LABELS, arrangeSeats, potTotal, seatNote } from '../table/tableView.js';
 import { useTableSocket } from '../table/useTableSocket.js';
-import { usePlayer } from '../usePlayer.js';
+import { isPlayerGone, usePlayer } from '../usePlayer.js';
+import { turnFrom } from '../../gestures/detector.js';
+import { GesturePanel } from '../../gestures/GesturePanel.jsx';
+import { useGestures } from '../../gestures/useGestures.js';
 import './TablePage.css';
 
 // Where each spot sits on the felt, in % of the table (x, y). Spot 0 is you, at the bottom;
@@ -74,6 +77,33 @@ export function TablePage() {
   }, [code, playerId]);
 
   const { state: live, mine, connection } = useTableSocket(code, playerId);
+
+  // Gestures (ui/gestures/, Ali). On unless the profile turned them off, or the player switches
+  // them off here. They send the same actions as the buttons, which always work too.
+  const [gesturesChoice, setGesturesChoice] = useState(null);
+  const [gestureSend, setGestureSend] = useState({ busy: false, error: null, turnKey: null });
+  const myTurn = (mine?.legalActions?.length ?? 0) > 0 && live?.currentPlayer === playerId;
+  const turnKey = `${live?.handNumber}-${live?.stage}-${live?.currentPlayer}-${mine?.minRaise}`;
+  const gesturesEnabled =
+    !problem && (gesturesChoice ?? (player ? player.gestureSettings?.enabled !== false : false));
+
+  async function sendGesture(action, amount) {
+    setGestureSend({ busy: true, error: null, turnKey });
+    try {
+      await gameApi.act(code, playerId, action, amount);
+      setGestureSend({ busy: false, error: null, turnKey });
+    } catch (err) {
+      if (isPlayerGone(err)) return startOver();
+      const error = err instanceof ApiError ? err.message : 'Tables unavailable';
+      setGestureSend({ busy: false, error, turnKey });
+    }
+  }
+
+  const gestures = useGestures({
+    enabled: gesturesEnabled,
+    turn: gestureSend.busy ? null : turnFrom({ myTurn, mine, bigBlind: table?.bigBlind }),
+    onFire: sendGesture,
+  });
 
   // Not at this table yet (e.g. someone opened the link): the waiting room seats you first.
   if (problem === 'notSeated') return <Navigate to={`/tables/${code}`} replace />;
@@ -172,6 +202,13 @@ export function TablePage() {
               ))}
           </div>
         </section>
+
+        <GesturePanel
+          gestures={gestures}
+          myTurn={myTurn}
+          onToggle={() => setGesturesChoice(!gesturesEnabled)}
+          error={gestureSend.turnKey === turnKey ? gestureSend.error : null}
+        />
 
         <ActionBar
           key={`${state?.handNumber}-${stage}-${state?.currentPlayer}-${mine?.minRaise}`}
