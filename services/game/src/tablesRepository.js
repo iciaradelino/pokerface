@@ -1,4 +1,5 @@
 import sql from 'mssql';
+import { MAX_CHIPS_PER_TABLE } from './validation.js';
 
 // All SQL for tables and seats lives here, so the routes can be tested with a fake.
 
@@ -92,8 +93,10 @@ export function createTablesRepository(pool) {
     },
 
     // Seats the player at the first free seat. The table row is locked, so two players
-    // joining at the same time cannot get the same seat.
-    // Returns { status: 'joined' | 'already_seated', seatIndex }, { status: 'full' } or { status: 'not_found' }.
+    // joining at the same time cannot get the same seat. Refuses a player whose starting stack
+    // would take the table over MAX_CHIPS_PER_TABLE.
+    // Returns { status: 'joined' | 'already_seated', seatIndex }, or { status: 'full' |
+    // 'chip_limit' | 'not_found' }.
     async joinTable(id, { playerId, playerName }) {
       return inTransaction(pool, async (transaction) => {
         const tables = await transaction
@@ -107,7 +110,7 @@ export function createTablesRepository(pool) {
         const seats = await transaction
           .request()
           .input('id', sql.Char(6), id)
-          .query('SELECT seat_index, player_id FROM dbo.seats WHERE table_id = @id');
+          .query('SELECT seat_index, player_id, stack FROM dbo.seats WHERE table_id = @id');
         const mine = seats.recordset.find((seat) => seat.player_id.toLowerCase() === playerId);
         if (mine) return { status: 'already_seated', seatIndex: mine.seat_index };
 
@@ -115,6 +118,8 @@ export function createTablesRepository(pool) {
         let seatIndex = 0;
         while (seatIndex < table.max_seats && taken.has(seatIndex)) seatIndex++;
         if (seatIndex === table.max_seats) return { status: 'full' };
+        const chips = seats.recordset.reduce((sum, seat) => sum + seat.stack, 0);
+        if (chips + table.starting_stack > MAX_CHIPS_PER_TABLE) return { status: 'chip_limit' };
 
         await transaction
           .request()
@@ -171,6 +176,56 @@ export function createTablesRepository(pool) {
                 SELECT playerId FROM OPENJSON(@stacks) WITH (playerId UNIQUEIDENTIFIER)
               );`),
       );
+    },
+
+    /** Hand results the players service has not received yet (oldest hands first). */
+    async getUnsentResults(limit) {
+      const result = await pool
+        .request()
+        .input('limit', sql.Int, limit)
+        .query(`SELECT TOP (@limit) r.hand_id, r.player_id, r.delta
+                FROM dbo.hand_players AS r
+                JOIN dbo.hands AS h ON h.id = r.hand_id
+                WHERE r.sent_at IS NULL AND r.rejected_at IS NULL
+                ORDER BY h.finished_at`);
+      return result.recordset.map((row) => ({
+        handId: row.hand_id.toLowerCase(),
+        playerId: row.player_id.toLowerCase(),
+        delta: row.delta,
+      }));
+    },
+
+    /** Records that the players service has this result, so it is not sent again. */
+    async markResultSent(handId, playerId) {
+      await pool
+        .request()
+        .input('handId', sql.UniqueIdentifier, handId)
+        .input('playerId', sql.UniqueIdentifier, playerId)
+        .query(`UPDATE dbo.hand_players SET sent_at = SYSUTCDATETIME()
+                WHERE hand_id = @handId AND player_id = @playerId AND sent_at IS NULL`);
+    },
+
+    /** Records a result the players service refused for good, so it is no longer sent. */
+    async markResultRejected(handId, playerId) {
+      await pool
+        .request()
+        .input('handId', sql.UniqueIdentifier, handId)
+        .input('playerId', sql.UniqueIdentifier, playerId)
+        .query(`UPDATE dbo.hand_players SET rejected_at = SYSUTCDATETIME()
+                WHERE hand_id = @handId AND player_id = @playerId AND sent_at IS NULL`);
+    },
+
+    /** True while a result of this table still has to reach the players service. */
+    async hasUnsentResults(id) {
+      const result = await pool
+        .request()
+        .input('id', sql.Char(6), id)
+        .query(`SELECT CASE WHEN EXISTS (
+                  SELECT 1 FROM dbo.hand_players AS r
+                  JOIN dbo.hands AS h ON h.id = r.hand_id
+                  WHERE h.table_id = @id AND r.sent_at IS NULL AND r.rejected_at IS NULL
+                ) THEN 1 ELSE 0 END AS pending`);
+      return result.recordset[0].pending === 1;
     },
 
     /** Frees a seat. Returns false if the player was not seated there. */

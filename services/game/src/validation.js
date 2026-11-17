@@ -16,7 +16,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   maxSeats: 6,
 });
 const MAX_BLIND = 1_000_000;
-const MAX_STACK = 1_000_000_000;
+
+// Most chips that may ever be at one table. It matches the players service's limit on a single
+// hand result (|delta| <= 1,000,000,000): nobody can win more than everyone else at the table
+// has, so no result can be refused. It also keeps every stack inside SQL Server's INT.
+export const MAX_CHIPS_PER_TABLE = 1_000_000_000;
 
 export function isUuid(value) {
   return typeof value === 'string' && UUID.test(value);
@@ -54,10 +58,15 @@ export function validateCreateTableInput(body) {
   if (!isWhole(smallBlind, 1, MAX_BLIND) || !isWhole(bigBlind, smallBlind, MAX_BLIND)) {
     return { error: `Blinds must be whole numbers from 1 to ${MAX_BLIND}, small blind not above the big blind` };
   }
-  if (!isWhole(startingStack, bigBlind, MAX_STACK)) {
+  if (!isWhole(startingStack, bigBlind, MAX_CHIPS_PER_TABLE)) {
     return { error: 'startingStack must be a whole number of at least one big blind' };
   }
   if (!isWhole(maxSeats, 2, 6)) return { error: 'maxSeats must be a whole number from 2 to 6' };
+  if (startingStack * maxSeats > MAX_CHIPS_PER_TABLE) {
+    return {
+      error: `startingStack x maxSeats must be at most ${MAX_CHIPS_PER_TABLE} chips, the limit per table`,
+    };
+  }
 
   return { value: { playerId: body.playerId.toLowerCase(), settings } };
 }

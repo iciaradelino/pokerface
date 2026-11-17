@@ -127,12 +127,15 @@ describe('when a hand ends', () => {
     expect(tables.hands[0].handId).toBe('11111111-1111-4111-8111-111111111111'); // Same id on retry.
   });
 
-  it('cannot delete a table while a hand is being played, but can between hands', async () => {
+  it('cannot delete a table while a hand is played or its results are unsent, but can after', async () => {
     await newTable();
     await live.join('K7QX2M', { playerId: ben, playerName: 'Ben' });
     await after(PAUSE);
     expect((await live.remove('K7QX2M')).status).toBe('hand_in_progress');
-    await live.leave('K7QX2M', ben);
+    await live.leave('K7QX2M', ben); // The hand ends and is saved, but players has not got it yet.
+    expect((await live.remove('K7QX2M')).status).toBe('results_pending');
+    expect(tables.hands).toHaveLength(1); // Nothing was deleted.
+    for (const r of await tables.getUnsentResults(10)) await tables.markResultSent(r.handId, r.playerId);
     expect((await live.remove('K7QX2M')).status).toBe('deleted');
     expect(tables.rows.has('K7QX2M')).toBe(false);
     expect((await live.remove('K7QX2M')).status).toBe('not_found');
