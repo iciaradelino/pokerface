@@ -63,7 +63,7 @@ async function start() {
     recognizer = await GestureRecognizer.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
       runningMode: "VIDEO",
-      numHands: 2,
+      numHands: 1,
     });
     setStatus("Requesting camera…");
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -118,13 +118,14 @@ function update(hands, now) {
   let candidate = null;
   let holdMs = HOLD_MS;
 
-  if (hands.length >= 2 && hands.every((h) => confident(h, "Open_Palm"))) {
-    candidate = "allin";
-    raise.active = false;
-  } else if (hands.length >= 1) {
+  if (hands.length >= 1) {
     const h = hands[0];
 
-    if (confident(h, "Thumb_Up")) {
+    if (confident(h, "ILoveYou")) {
+      // All-in: the 🤟 sign. Two open palms was too often read as a raise.
+      candidate = "allin";
+      raise.active = false;
+    } else if (confident(h, "Thumb_Up")) {
       candidate = "call";
     } else if (confident(h, "Thumb_Down")) {
       candidate = "fold";

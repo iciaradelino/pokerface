@@ -1,0 +1,114 @@
+/* Gesture panel on the table screen. Colours come from src/styles/tokens.css. */
+
+.gesture-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: min(100%, 860px);
+  margin: 0 auto;
+}
+
+.gesture-panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 240px;
+}
+
+.gesture-panel__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.gesture-panel__message {
+  font-weight: 700;
+}
+
+.gesture-panel__raise strong {
+  color: var(--color-lime-text);
+}
+
+.gesture-panel__guide {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gesture-preview {
+  position: relative;
+  width: 192px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-tile);
+  background: var(--color-tile-bg);
+}
+
+/* Mirrored, so moving your hand up and to the left looks like it does in a mirror. */
+.gesture-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.gesture-preview__ring {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 8, 14, 0.35);
+}
+
+.gesture-preview__ring > * {
+  grid-area: 1 / 1;
+}
+
+.gesture-preview__label {
+  color: var(--color-on-dark);
+  font-weight: 800;
+  font-size: var(--text-small);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.gesture-ring__track,
+.gesture-ring__bar {
+  fill: none;
+  stroke-width: 8;
+}
+
+.gesture-ring__track {
+  stroke: rgba(255, 255, 255, 0.25);
+}
+
+.gesture-ring__bar {
+  stroke: var(--color-lime);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.08s linear;
+}
+
+.gesture-ring__bar--fold {
+  stroke: var(--color-negative);
+}
+
+.gesture-ring__bar--call {
+  stroke: var(--color-call);
+}
+
+.gesture-ring__bar--allin {
+  stroke: var(--color-chip);
+}
+
+@media (max-width: 640px) {
+  .gesture-preview {
+    width: 100%;
+  }
+}
