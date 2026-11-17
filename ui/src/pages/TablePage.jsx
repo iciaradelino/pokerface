@@ -73,11 +73,15 @@ export function TablePage() {
     };
   }, [code, playerId]);
 
-  const { state: live, mine, connection } = useTableSocket(code, playerId);
+  const { state: live, mine, connection, closeCode } = useTableSocket(code, playerId);
 
   // Not at this table yet (e.g. someone opened the link): the waiting room seats you first.
   if (problem === 'notSeated') return <Navigate to={`/tables/${code}`} replace />;
   if (problem) return <TableProblem code={code} problem={problem} />;
+  // The server closed the socket for good: the table is gone, or you are no longer seated.
+  if (connection === 'closed') {
+    return <TableProblem code={code} problem={closeCode === 4403 ? 'notAtTable' : 'notFound'} />;
+  }
 
   const state = live ?? (table ? stateFromTable(table) : null);
   const maxSeats = table?.maxSeats ?? 6;
@@ -287,6 +291,7 @@ function CopyInvite({ code }) {
 
 const PROBLEMS = {
   notFound: ['Table not found', 'This table doesn’t exist anymore.'],
+  notAtTable: ['You’re not at this table', 'You left this table, or your seat was given up.'],
   unavailable: ['Tables unavailable', 'We couldn’t reach the game server. Try again in a moment.'],
 };
 
