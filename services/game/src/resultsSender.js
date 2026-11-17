@@ -36,7 +36,10 @@ export function createResultsSender({
     for (;;) {
       const rows = await tables.getUnsentResults(batchSize);
       for (const row of rows) {
-        const outcome = await players.saveResult(row.playerId, { handId: row.handId, delta: row.delta });
+        const outcome = await players.saveResult(row.playerId, {
+          handId: row.handId,
+          delta: row.delta,
+        });
         if (outcome === 'rejected') {
           await tables.markResultRejected(row.handId, row.playerId);
           logger(JSON.stringify({ level: 'warn', event: 'result_rejected', handId: row.handId }));
@@ -57,7 +60,8 @@ export function createResultsSender({
         const settled = await round();
         if (settled > 0) log('results_sent', { count: settled });
       } catch (error) {
-        const reason = error instanceof PlayersUnavailableError ? 'players_unavailable' : 'database';
+        const reason =
+          error instanceof PlayersUnavailableError ? 'players_unavailable' : 'database';
         log('results_send_failed', { reason });
         return;
       }

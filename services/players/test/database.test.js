@@ -79,11 +79,7 @@ describe('connectDatabase', () => {
 });
 
 describe('migrate', () => {
-  const migrationFiles = [
-    '001_health.sql',
-    '002_players.sql',
-    '003_hand_results_player_index.sql',
-  ];
+  const migrationFiles = ['001_health.sql', '002_players.sql', '003_hand_results_player_index.sql'];
 
   // Answers the "already applied?" lookups and records what was run and recorded.
   function migrationPool({ applied = [], failOnBatch } = {}) {
@@ -98,7 +94,8 @@ describe('migrate', () => {
       return { recordset: [] };
     });
     pool.recorded = () =>
-      pool.log.filter((entry) => entry.text.includes('INSERT INTO dbo.schema_migrations'))
+      pool.log
+        .filter((entry) => entry.text.includes('INSERT INTO dbo.schema_migrations'))
         .map((entry) => entry.inputs.name);
     pool.batches = () => pool.log.filter((entry) => entry.batch);
     return pool;

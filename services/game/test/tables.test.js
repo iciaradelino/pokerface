@@ -52,10 +52,19 @@ describe('POST /tables', () => {
 
   it('keeps valid custom settings', async () => {
     const response = await createTable({
-      playerId: ana, smallBlind: 10, bigBlind: 20, startingStack: 500, maxSeats: 4,
+      playerId: ana,
+      smallBlind: 10,
+      bigBlind: 20,
+      startingStack: 500,
+      maxSeats: 4,
     });
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ smallBlind: 10, bigBlind: 20, startingStack: 500, maxSeats: 4 });
+    expect(response.body).toMatchObject({
+      smallBlind: 10,
+      bigBlind: 20,
+      startingStack: 500,
+      maxSeats: 4,
+    });
     expect(response.body.seats[0].stack).toBe(500);
   });
 
@@ -100,12 +109,17 @@ describe('POST /tables', () => {
     players.down = true;
     const response = await createTable();
     expect(response.status).toBe(503);
-    expect(response.body).toEqual({ message: 'Player service unavailable', code: 'PLAYERS_UNAVAILABLE' });
+    expect(response.body).toEqual({
+      message: 'Player service unavailable',
+      code: 'PLAYERS_UNAVAILABLE',
+    });
     expect(tables.rows.size).toBe(0);
   });
 
   it('returns 503 without details when the database fails', async () => {
-    tables.createTable = async () => { throw new Error('private connection details'); };
+    tables.createTable = async () => {
+      throw new Error('private connection details');
+    };
     const response = await createTable();
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ message: 'Tables unavailable', code: 'UNAVAILABLE' });
@@ -137,7 +151,8 @@ describe('GET /tables/:id', () => {
 });
 
 describe('POST /tables/:id/join', () => {
-  const join = (playerId, id = 'K7QX2M') => request(app).post(`/tables/${id}/join`).send({ playerId });
+  const join = (playerId, id = 'K7QX2M') =>
+    request(app).post(`/tables/${id}/join`).send({ playerId });
 
   it('seats the player at the first free seat with the starting stack', async () => {
     await createTable();
@@ -212,7 +227,9 @@ describe('POST /tables/:id/join', () => {
 
 describe('DELETE /tables/:id', () => {
   const remove = (playerId, id = 'K7QX2M') =>
-    request(app).delete(`/tables/${id}`).query(playerId === undefined ? {} : { playerId });
+    request(app)
+      .delete(`/tables/${id}`)
+      .query(playerId === undefined ? {} : { playerId });
 
   it('lets the creator delete the table', async () => {
     await createTable();

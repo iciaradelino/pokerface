@@ -114,14 +114,20 @@ export function createLiveTables({
   function updateTurnTimer(entry) {
     const playerId = playerToAct(entry.game);
     const handNumber = entry.game.handNumber;
-    if (entry.turn && entry.turn.playerId === playerId && entry.turn.handNumber === handNumber) return;
+    if (entry.turn && entry.turn.playerId === playerId && entry.turn.handNumber === handNumber)
+      return;
     clearTimeout(entry.turn?.timer);
     entry.turn = null;
     if (playerId === null) return;
     const timer = setTimeout(() => {
       run(entry.id, () => timeOut(entry, handNumber, playerId)).catch(() => {});
     }, turnMs);
-    entry.turn = { handNumber, playerId, endsAt: new Date(Date.now() + turnMs).toISOString(), timer };
+    entry.turn = {
+      handNumber,
+      playerId,
+      endsAt: new Date(Date.now() + turnMs).toISOString(),
+      timer,
+    };
   }
 
   async function timeOut(entry, handNumber, playerId) {
@@ -234,7 +240,8 @@ export function createLiveTables({
       run(id, async () => {
         const entry = await load(id);
         if (!entry) return { status: 'not_found' };
-        if (!entry.game.seats.some((seat) => seat?.id === playerId)) return { status: 'not_seated' };
+        if (!entry.game.seats.some((seat) => seat?.id === playerId))
+          return { status: 'not_seated' };
         const inHand =
           isHandInProgress(entry.game) && entry.game.hand.players.some((p) => p.id === playerId);
         if (!inHand) await tables.removeSeat(id, playerId);

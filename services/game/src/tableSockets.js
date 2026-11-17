@@ -37,14 +37,16 @@ export function attachTableSockets({
   const rooms = new Map(); // table id -> Set of { socket, playerId, admitted, alive }
 
   const logLine = (path, status, started) =>
-    logger(JSON.stringify({
-      level: 'info',
-      event: 'request',
-      method: 'GET',
-      path,
-      status,
-      durationMs: Math.round((performance.now() - started) * 100) / 100,
-    }));
+    logger(
+      JSON.stringify({
+        level: 'info',
+        event: 'request',
+        method: 'GET',
+        path,
+        status,
+        durationMs: Math.round((performance.now() - started) * 100) / 100,
+      }),
+    );
 
   const logEvent = (event, fields) => logger(JSON.stringify({ level: 'info', event, ...fields }));
 
@@ -77,7 +79,12 @@ export function attachTableSockets({
     const to = message.to.toLowerCase();
     for (const connection of rooms.get(tableId) ?? []) {
       if (connection.admitted && connection.playerId === to) {
-        sendJson(connection.socket, { type: 'signal', from: sender.playerId, to, data: message.data });
+        sendJson(connection.socket, {
+          type: 'signal',
+          from: sender.playerId,
+          to,
+          data: message.data,
+        });
       }
     }
   }
@@ -87,14 +94,17 @@ export function attachTableSockets({
       socket.close(code, reason);
       logLine(path, code, started);
     };
-    if (!tableId || !isUuid(playerId)) return refuse(CLOSE.BAD_REQUEST, 'Invalid table code or playerId');
+    if (!tableId || !isUuid(playerId))
+      return refuse(CLOSE.BAD_REQUEST, 'Invalid table code or playerId');
 
     // In the room from the start so the heartbeat and cleanup see it, but not admitted: it gets
     // no state and no signals, and its own signals are dropped, until membership is confirmed.
     const connection = { socket, playerId: playerId.toLowerCase(), alive: true, admitted: false };
     join(tableId, connection);
     socket.on('close', () => leave(tableId, connection));
-    socket.on('pong', () => { connection.alive = true; });
+    socket.on('pong', () => {
+      connection.alive = true;
+    });
     socket.on('message', (data) => relay(tableId, connection, data.toString()));
 
     let game;
@@ -136,9 +146,17 @@ export function attachTableSockets({
     wss.handleUpgrade(request, socket, head, (ws) => {
       // Without a listener, a socket error (e.g. a message over maxPayload) is thrown and stops
       // the whole process. ws closes the connection itself (1009 for a message too big).
-      ws.on('error', (error) => logEvent('socket_error', { path: url.pathname, code: error.code ?? 'unknown' }));
-      accept(ws, request, normalizeTableId(match[1]), url.searchParams.get('playerId'), url.pathname, started)
-        .catch(() => ws.close(1011, 'Tables unavailable'));
+      ws.on('error', (error) =>
+        logEvent('socket_error', { path: url.pathname, code: error.code ?? 'unknown' }),
+      );
+      accept(
+        ws,
+        request,
+        normalizeTableId(match[1]),
+        url.searchParams.get('playerId'),
+        url.pathname,
+        started,
+      ).catch(() => ws.close(1011, 'Tables unavailable'));
     });
   }
   server.on('upgrade', onUpgrade);

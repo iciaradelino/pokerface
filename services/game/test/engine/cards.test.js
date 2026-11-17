@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createDeck,
-  isValidCard,
-  rankValue,
-  shuffle,
-} from '../../src/engine/cards.js';
+import { createDeck, isValidCard, rankValue, shuffle } from '../../src/engine/cards.js';
 import { secureRandomInt, seededRandomInt } from '../../src/engine/random.js';
 
 describe('cards', () => {

@@ -40,11 +40,12 @@ Run in each of `services/players/` and `services/game/`:
 
 ```sh
 npm ci
-npm test
+npm run lint
+npm run format:check
 npm run test:coverage
 ```
 
-Our tests cover health responses, recovery, allowed browser origins and request logs. We still need to add the full service tests and enforce 70% coverage in CI.
+GitHub Actions runs lint, formatting, coverage and a production dependency audit on every PR and push. Coverage below 70% fails the checks. CI also builds the service images and runs the smoke test against the Compose stack with its own SQL Server container.
 
 ### UI
 

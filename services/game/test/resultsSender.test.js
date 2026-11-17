@@ -18,7 +18,13 @@ let logs;
 
 // A finished hand as live tables would have saved it.
 function saveHand(handId, deltas) {
-  tables.hands.push({ tableId: 'K7QX2M', handId, handNumber: tables.hands.length + 1, deltas, stacks: [] });
+  tables.hands.push({
+    tableId: 'K7QX2M',
+    handId,
+    handNumber: tables.hands.length + 1,
+    deltas,
+    stacks: [],
+  });
 }
 
 beforeEach(() => {
@@ -42,7 +48,10 @@ afterEach(() => {
 
 describe('sending results', () => {
   it('sends every pending result with its handId and marks it as sent', async () => {
-    saveHand(hand1, [{ playerId: ana, delta: 10 }, { playerId: ben, delta: -10 }]);
+    saveHand(hand1, [
+      { playerId: ana, delta: 10 },
+      { playerId: ben, delta: -10 },
+    ]);
     await sender.sendPending();
     expect(players.results).toEqual([
       { playerId: ana, handId: hand1, delta: 10 },
@@ -53,14 +62,23 @@ describe('sending results', () => {
   });
 
   it('goes through several batches', async () => {
-    saveHand(hand1, [{ playerId: ana, delta: 10 }, { playerId: ben, delta: -10 }]);
-    saveHand(hand2, [{ playerId: ana, delta: -5 }, { playerId: ben, delta: 5 }]);
+    saveHand(hand1, [
+      { playerId: ana, delta: 10 },
+      { playerId: ben, delta: -10 },
+    ]);
+    saveHand(hand2, [
+      { playerId: ana, delta: -5 },
+      { playerId: ben, delta: 5 },
+    ]);
     await sender.sendPending();
     expect(players.results).toHaveLength(4);
   });
 
-  it('marks a deleted player\'s result as sent and never retries it', async () => {
-    saveHand(hand1, [{ playerId: ana, delta: 10 }, { playerId: gone, delta: -10 }]);
+  it("marks a deleted player's result as sent and never retries it", async () => {
+    saveHand(hand1, [
+      { playerId: ana, delta: 10 },
+      { playerId: gone, delta: -10 },
+    ]);
     await sender.sendPending();
     expect(await tables.getUnsentResults(10)).toEqual([]);
     expect(logs).toContainEqual(expect.objectContaining({ event: 'result_player_gone' }));
@@ -77,16 +95,26 @@ describe('sending results', () => {
 
 describe('when the players service is down', () => {
   it('keeps the results and stops the round after the first failure', async () => {
-    saveHand(hand1, [{ playerId: ana, delta: 10 }, { playerId: ben, delta: -10 }]);
+    saveHand(hand1, [
+      { playerId: ana, delta: 10 },
+      { playerId: ben, delta: -10 },
+    ]);
     players.down = true;
     await sender.sendPending();
     expect(players.calls).toBe(1); // Did not try Ben after Ana failed.
     expect(await tables.getUnsentResults(10)).toHaveLength(2);
-    expect(logs).toContainEqual({ level: 'info', event: 'results_send_failed', reason: 'players_unavailable' });
+    expect(logs).toContainEqual({
+      level: 'info',
+      event: 'results_send_failed',
+      reason: 'players_unavailable',
+    });
   });
 
   it('sends them on its own within a minute once players is back, even if no hand is played', async () => {
-    saveHand(hand1, [{ playerId: ana, delta: 10 }, { playerId: ben, delta: -10 }]);
+    saveHand(hand1, [
+      { playerId: ana, delta: 10 },
+      { playerId: ben, delta: -10 },
+    ]);
     players.down = true;
     sender.start();
     await vi.advanceTimersByTimeAsync(0);
@@ -97,9 +125,15 @@ describe('when the players service is down', () => {
   });
 
   it('also stops when the database fails, without throwing', async () => {
-    tables.getUnsentResults = async () => { throw new Error('database down'); };
+    tables.getUnsentResults = async () => {
+      throw new Error('database down');
+    };
     await expect(sender.sendPending()).resolves.toBeUndefined();
-    expect(logs).toContainEqual({ level: 'info', event: 'results_send_failed', reason: 'database' });
+    expect(logs).toContainEqual({
+      level: 'info',
+      event: 'results_send_failed',
+      reason: 'database',
+    });
   });
 });
 
@@ -107,9 +141,14 @@ describe('rounds', () => {
   it('runs one round at a time and goes once more if asked meanwhile', async () => {
     saveHand(hand1, [{ playerId: ana, delta: 10 }]);
     let release;
-    const slow = new Promise((resolve) => { release = resolve; });
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
     const original = players.saveResult;
-    players.saveResult = async (...args) => { await slow; return original(...args); };
+    players.saveResult = async (...args) => {
+      await slow;
+      return original(...args);
+    };
 
     const first = sender.sendPending();
     saveHand(hand2, [{ playerId: ben, delta: 5 }]); // Saved while the first round runs.
@@ -122,7 +161,14 @@ describe('rounds', () => {
 
   it('is started by live tables after every saved hand', async () => {
     let saved = 0;
-    const live = createLiveTables({ tables, handPauseMs: 10, logger: () => {}, onHandSaved: () => { saved += 1; } });
+    const live = createLiveTables({
+      tables,
+      handPauseMs: 10,
+      logger: () => {},
+      onHandSaved: () => {
+        saved += 1;
+      },
+    });
     await tables.createTable({
       settings: { smallBlind: 5, bigBlind: 10, startingStack: 1000, maxSeats: 6 },
       createdBy: ana,
@@ -139,8 +185,14 @@ describe('rounds', () => {
 
 describe('results the players service refuses for good', () => {
   it('marks them as rejected and carries on with the rest', async () => {
-    saveHand(hand1, [{ playerId: ana, delta: 1_200_000_000 }, { playerId: ben, delta: -1_200_000_000 }]);
-    saveHand(hand2, [{ playerId: ana, delta: 10 }, { playerId: ben, delta: -10 }]);
+    saveHand(hand1, [
+      { playerId: ana, delta: 1_200_000_000 },
+      { playerId: ben, delta: -1_200_000_000 },
+    ]);
+    saveHand(hand2, [
+      { playerId: ana, delta: 10 },
+      { playerId: ben, delta: -10 },
+    ]);
     await sender.sendPending();
     expect(players.results.map((r) => r.handId)).toEqual([hand2, hand2]);
     expect(tables.rejected.size).toBe(2);

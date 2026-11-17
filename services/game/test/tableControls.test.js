@@ -66,7 +66,9 @@ describe('POST /tables/:id/leave', () => {
     expect(response.status).toBe(404);
     expect(response.body.code).toBe('NOT_SEATED');
     expect((await leave('nope')).status).toBe(400);
-    expect((await request(app).post('/tables/ZZZZZZ/leave').send({ playerId: ben })).status).toBe(404);
+    expect((await request(app).post('/tables/ZZZZZZ/leave').send({ playerId: ben })).status).toBe(
+      404,
+    );
   });
 });
 
@@ -84,7 +86,9 @@ describe('POST /tables/:id/pause and /resume', () => {
     expect((await pause(ben)).status).toBe(403);
     expect((await pause('nope')).status).toBe(400);
     expect((await request(app).post('/tables/K7QX2M/pause').send([])).status).toBe(400);
-    expect((await request(app).post('/tables/ZZZZZZ/pause').send({ playerId: ana })).status).toBe(404);
+    expect((await request(app).post('/tables/ZZZZZZ/pause').send({ playerId: ana })).status).toBe(
+      404,
+    );
   });
 
   it('returns 404 if the table disappeared in the meantime', async () => {
@@ -104,7 +108,8 @@ describe('DELETE /tables/:id during a hand', () => {
     const pending = await remove(ana);
     expect(pending.status).toBe(409);
     expect(pending.body.code).toBe('RESULTS_PENDING');
-    for (const r of await tables.getUnsentResults(10)) await tables.markResultSent(r.handId, r.playerId);
+    for (const r of await tables.getUnsentResults(10))
+      await tables.markResultSent(r.handId, r.playerId);
     expect((await remove(ana)).status).toBe(204);
   });
 });

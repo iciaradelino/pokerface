@@ -29,7 +29,9 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
         paused: newTablesPaused,
         createdBy,
         createdAt: '2026-11-11T18:00:00.000Z',
-        seats: [{ seatIndex: 0, playerId: createdBy, name: creatorName, stack: settings.startingStack }],
+        seats: [
+          { seatIndex: 0, playerId: createdBy, name: creatorName, stack: settings.startingStack },
+        ],
       };
       rows.set(id, table);
       return copy(table);
@@ -66,8 +68,13 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
     },
     async getUnsentResults(limit) {
       return hands
-        .flatMap((h) => h.deltas.map((d) => ({ handId: h.handId, playerId: d.playerId, delta: d.delta })))
-        .filter((r) => !sent.has(`${r.handId}:${r.playerId}`) && !rejected.has(`${r.handId}:${r.playerId}`))
+        .flatMap((h) =>
+          h.deltas.map((d) => ({ handId: h.handId, playerId: d.playerId, delta: d.delta })),
+        )
+        .filter(
+          (r) =>
+            !sent.has(`${r.handId}:${r.playerId}`) && !rejected.has(`${r.handId}:${r.playerId}`),
+        )
         .slice(0, limit);
     },
     async markResultSent(handId, playerId) {

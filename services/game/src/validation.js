@@ -56,7 +56,9 @@ export function validateCreateTableInput(body) {
   }
   const { smallBlind, bigBlind, startingStack, maxSeats } = settings;
   if (!isWhole(smallBlind, 1, MAX_BLIND) || !isWhole(bigBlind, smallBlind, MAX_BLIND)) {
-    return { error: `Blinds must be whole numbers from 1 to ${MAX_BLIND}, small blind not above the big blind` };
+    return {
+      error: `Blinds must be whole numbers from 1 to ${MAX_BLIND}, small blind not above the big blind`,
+    };
   }
   if (!isWhole(startingStack, bigBlind, MAX_CHIPS_PER_TABLE)) {
     return { error: 'startingStack must be a whole number of at least one big blind' };

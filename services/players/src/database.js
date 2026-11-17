@@ -35,7 +35,9 @@ export async function migrate(pool) {
   const directory = new URL('../migrations/', import.meta.url);
   const files = (await readdir(directory)).filter((file) => /^\d+.*\.sql$/.test(file)).sort();
   for (const file of files) {
-    const applied = await pool.request().input('name', sql.NVarChar(255), file)
+    const applied = await pool
+      .request()
+      .input('name', sql.NVarChar(255), file)
       .query('SELECT name FROM dbo.schema_migrations WHERE name = @name');
     if (applied.recordset.length) continue;
 
@@ -43,7 +45,9 @@ export async function migrate(pool) {
     await transaction.begin();
     try {
       await transaction.request().batch(await readFile(new URL(file, directory), 'utf8'));
-      await transaction.request().input('name', sql.NVarChar(255), file)
+      await transaction
+        .request()
+        .input('name', sql.NVarChar(255), file)
         .query('INSERT INTO dbo.schema_migrations (name) VALUES (@name)');
       await transaction.commit();
       console.log(`Applied migration: ${file}`);
