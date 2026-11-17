@@ -123,10 +123,17 @@ describe('connecting', () => {
     expect(ws.messages).toEqual([]);
   });
 
-  it('closes with 1011 when the database is down', async () => {
+  it('closes the socket when the database is down, with a code the UI keeps retrying on', async () => {
     live.close();
     tables.getTable = async () => { throw new Error('down'); };
-    expect((await connect(ana).closed).code).toBe(1011);
+    const ws = connect(ana);
+    const { code } = await ws.closed;
+    // The server closes with 1011. On a busy machine the client can see the connection drop
+    // before that close frame arrives (1006). Either way it is not 4400/4403/4404, so the UI
+    // reconnects, which is what matters while the database is down.
+    expect([1011, 1006]).toContain(code);
+    expect(ws.messages).toEqual([]);
+    expect(logs).toContainEqual(expect.objectContaining({ path: '/tables/K7QX2M/ws', status: 1011 }));
   });
 });
 
@@ -225,5 +232,48 @@ describe('heartbeat', () => {
     await until(() => last(ws, 'private'), 'Ana connected');
     ws._socket.pause(); // The client stops reading, so it never answers the pings.
     await until(() => sockets.count('K7QX2M') === 0, 'the dead connection to be removed');
+  });
+});
+
+describe('robustness', () => {
+  it('closes a connection that sends a message over 64 KB without stopping the service', async () => {
+    await join(ben);
+    const anaWs = connect(ana);
+    const benWs = connect(ben);
+    await until(() => last(anaWs, 'private') && last(benWs, 'private'), 'both connected');
+
+    anaWs.send('x'.repeat(70 * 1024));
+    expect((await anaWs.closed).code).toBe(1009); // Message too big.
+    expect(logs).toContainEqual(expect.objectContaining({ event: 'socket_error', code: 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH' }));
+
+    // The service and the other players are unaffected.
+    expect((await request(server).get('/health')).status).toBe(200);
+    const before = benWs.messages.length;
+    await request(server).post('/tables/K7QX2M/leave').send({ playerId: ana });
+    await until(() => benWs.messages.length > before, 'Ben to keep getting updates');
+  });
+
+  it('lets a connection neither send nor receive signals until its membership is confirmed', async () => {
+    await join(ben);
+    const benWs = connect(ben);
+    await until(() => last(benWs, 'private'), 'Ben connected');
+
+    // Slow down the membership lookup, so Cleo's socket is open but not yet checked.
+    const realGet = live.get;
+    let release;
+    const lookupDone = new Promise((resolve) => { release = resolve; });
+    live.get = async (id) => { await lookupDone; return realGet(id); };
+
+    const cleoWs = connect(cleo); // Cleo is not seated.
+    await new Promise((resolve) => cleoWs.once('open', resolve));
+    cleoWs.send(JSON.stringify({ type: 'signal', to: ben, data: { candidate: 'from-cleo' } }));
+    benWs.send(JSON.stringify({ type: 'signal', to: cleo, data: { candidate: 'to-cleo' } }));
+    await new Promise((resolve) => setTimeout(resolve, 50)); // Give both signals time to arrive.
+
+    release(); // Now the lookup finds that Cleo is not seated.
+    expect((await cleoWs.closed).code).toBe(CLOSE.NOT_SEATED);
+    expect(benWs.messages.filter((m) => m.type === 'signal')).toEqual([]);
+    expect(cleoWs.messages).toEqual([]);
+    live.get = realGet;
   });
 });
