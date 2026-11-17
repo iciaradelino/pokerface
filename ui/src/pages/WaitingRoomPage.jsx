@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, useParams } from 'react-router';
 import { gameApi } from '../api/gameApi.js';
 import { ApiError } from '../api/http.js';
 import { playerColour } from '../components/Avatar.jsx';
@@ -10,8 +10,8 @@ import { isCompleteCode, normalizeCode } from '../tableCode.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import './WaitingRoomPage.css';
 
-// How often the seats are refreshed. The game service has no WebSocket yet; once it does,
-// the "state" messages replace this.
+// How often the seats are refreshed, and how players who are not the host find out that the
+// game has started (the table's `paused` turns false).
 export const POLL_MS = 3000;
 const MIN_PLAYERS = 2;
 
@@ -19,9 +19,11 @@ const MIN_PLAYERS = 2;
  * /tables/:code. Opening the page joins the table, so the creator, someone who typed the code
  * and someone who opened an invite link all land here the same way. Joining again (a reload)
  * gives you your seat back.
+ *
+ * Tables are created paused. The host's Start game unpauses it (POST /tables/:id/start), and as
+ * soon as the table reads paused: false, everyone here moves to /tables/:code/play.
  */
 export function WaitingRoomPage({ pollMs = POLL_MS }) {
-  const navigate = useNavigate();
   const code = normalizeCode(useParams().code);
   const { playerId, player, startOver } = usePlayer();
 
@@ -70,6 +72,17 @@ export function WaitingRoomPage({ pollMs = POLL_MS }) {
     return () => clearInterval(timer);
   }, [status, code, pollMs]);
 
+  // Only the host can start, but everyone follows: on the start response, or on the next refresh.
+  async function startGame() {
+    const latest = await gameApi.startTable(code, playerId);
+    setTable({ ...latest, paused: false });
+  }
+
+  // `=== false`, not `!paused`: a table without the field (older game service) never moves on.
+  if (status === 'seated' && table?.paused === false) {
+    return <Navigate to={`/tables/${code}/play`} replace />;
+  }
+
   return (
     <div className="waiting">
       <TopBar player={player} />
@@ -81,7 +94,7 @@ export function WaitingRoomPage({ pollMs = POLL_MS }) {
             playerId={playerId}
             player={player}
             stale={stale}
-            onStart={() => navigate(`/tables/${code}/play`)}
+            onStart={startGame}
           />
         ) : (
           <Problem
@@ -138,6 +151,8 @@ function Problem({ status, code, onRetry }) {
 }
 
 function Room({ code, table, playerId, player, stale, onStart }) {
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState(null);
   const seats = Array.from(
     { length: table.maxSeats },
     (_, index) => table.seats.find((seat) => seat.seatIndex === index) ?? null,
@@ -214,11 +229,25 @@ function Room({ code, table, playerId, player, stale, onStart }) {
                 variant="lime"
                 size="hero"
                 block
-                disabled={taken < MIN_PLAYERS}
-                onClick={onStart}
+                disabled={taken < MIN_PLAYERS || starting}
+                onClick={async () => {
+                  setStarting(true);
+                  setStartError(null);
+                  try {
+                    await onStart(); // On success this page moves to the table.
+                  } catch (err) {
+                    setStartError(err instanceof ApiError ? err.message : 'Tables unavailable');
+                    setStarting(false);
+                  }
+                }}
               >
-                Start game
+                {starting ? 'Starting…' : 'Start game'}
               </Button>
+              {startError && (
+                <p className="field__error" role="alert">
+                  {startError}
+                </p>
+              )}
               {taken < MIN_PLAYERS && (
                 <p className="text-small muted">
                   You need at least {MIN_PLAYERS} players to start.
