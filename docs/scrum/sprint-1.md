@@ -9,11 +9,11 @@ Deploy our skeleton to Azure with the pipeline in the first two days, then ship 
 
 ## Planning
 
-_To fill in at Planning: what we agreed, the order of the backlog and any change to the goal._
+The team selected the work below for the sprint, in this order, and kept the sprint goal as written. Ali, as Product Owner, owns the order of the backlog. Item 1, the pipeline, was due in the first two days, and nothing else was to be merged until it worked.
 
 ### Selected work
 
-Proposed from the Sprint 1 list in [plan.md](../../plan.md). The Product Owner confirms or changes it at Planning.
+Taken from the Sprint 1 list in [plan.md](../../plan.md).
 
 | Order | Story | Owner |
 |---|---|---|
