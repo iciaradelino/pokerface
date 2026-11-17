@@ -155,6 +155,45 @@ describe('signals', () => {
     expect(sent[0].data.description.type).toBe('answer');
   });
 
+  it('does not answer someone who is not at the table', async () => {
+    const { mesh, sent } = makeMesh('me');
+    mesh.setLocalStream(fakeStream('mine', { audio: true }));
+    mesh.setPeers(['me', 'sofia']);
+    await flush();
+    const before = sent.length; // my offer to sofia
+    await mesh.handleSignal('stranger', { description: { type: 'offer', sdp: 'x' } });
+    await mesh.handleSignal('stranger', { candidate: { candidate: 'c' } });
+    expect(Object.keys(mesh.remotes())).toEqual(['sofia']);
+    expect(FakePeerConnection.all).toHaveLength(1);
+    expect(sent).toHaveLength(before);
+  });
+
+  it('stops answering a player after they leave the table', async () => {
+    const { mesh, sent } = makeMesh('me');
+    mesh.setPeers(['me', 'sofia']);
+    mesh.setPeers(['me']);
+    await flush();
+    const before = sent.length;
+    await mesh.handleSignal('sofia', { description: { type: 'offer', sdp: '' } });
+    expect(Object.keys(mesh.remotes())).toEqual([]);
+    expect(sent).toHaveLength(before);
+  });
+
+  it('still connects to a player whose early offer was ignored, once the seats update', async () => {
+    const { a, b } = twoPlayers();
+    a.mesh.setLocalStream(fakeStream('stream-a'));
+    b.mesh.setLocalStream(fakeStream('stream-b'));
+    b.mesh.setPeers(['aaa', 'bbb']);
+    a.mesh.setPeers(['aaa']); // a has not heard about b yet, so b's offer is ignored
+    await flush();
+    expect(a.mesh.remotes().bbb).toBeUndefined();
+    a.mesh.setPeers(['aaa', 'bbb']); // now it has: a makes its own offer
+    await vi.waitFor(() => {
+      expect(a.mesh.remotes().bbb.stream?.id).toBe('stream-b');
+      expect(b.mesh.remotes().aaa.stream?.id).toBe('stream-a');
+    });
+  });
+
   it('ignores signals from itself or without content', async () => {
     const { mesh } = makeMesh('aaa');
     await mesh.handleSignal('aaa', { candidate: {} });

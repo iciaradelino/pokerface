@@ -42,6 +42,10 @@ Relay `{ type: "signal", from, to, data }` to the player `to` at the same table,
 drop signals for players who are not at the table. `data` is `{ description }` (an SDP offer or
 answer) or `{ candidate }`, and the server does not need to read it.
 
+The client does not rely on that alone: once it has the seat list, `mesh.js` ignores signals
+from anyone who is not in it. An offer that arrives a moment before the seat list is dropped,
+and the connection still forms when the list updates, because then it is this side that offers.
+
 ## Decisions
 
 - **Video and sound.** The mic uses echo cancellation, and my own tile is muted so I never hear

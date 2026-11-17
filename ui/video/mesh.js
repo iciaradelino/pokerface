@@ -25,6 +25,7 @@ export function createMesh({
 }) {
   const peers = new Map(); // playerId -> { pc, polite, makingOffer, ignoreOffer, stream, state }
   let localStream = null;
+  let seatsKnown = false; // true once setPeers has been called
 
   function createPeer(remoteId) {
     const pc = new PeerConnection({ iceServers });
@@ -101,16 +102,23 @@ export function createMesh({
 
     /** The other players at the table. Connects to new ones and drops those who left. */
     setPeers(ids) {
+      seatsKnown = true;
       const wanted = new Set(ids.filter((id) => id !== selfId));
       for (const id of [...peers.keys()]) if (!wanted.has(id)) removePeer(id);
       for (const id of wanted) if (!peers.has(id)) createPeer(id);
       onChange();
     },
 
-    /** A "signal" message from another player: { description } or { candidate }. */
+    /**
+     * A "signal" message from another player: { description } or { candidate }.
+     * After setPeers, only players in the latest list are answered.
+     */
     async handleSignal(from, data) {
       if (from === selfId || typeof from !== 'string') return;
       if (!data?.description && !data?.candidate) return;
+      // Faces and voices: once I know who is at the table, strangers get no answer, even if the
+      // relay lets their signal through. Before the first list, an offer may simply be early.
+      if (seatsKnown && !peers.has(from)) return;
       const peer = peers.get(from) ?? createPeer(from);
       const { pc } = peer;
       try {
