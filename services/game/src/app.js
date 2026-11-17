@@ -166,7 +166,7 @@ export function createApp({
     response.json({ leftNow: true });
   })));
 
-  // Only the creator may pause, resume or delete a table. Returns the table, or null after
+  // Only the creator may start, pause, resume or delete a table. Returns the table, or null after
   // sending the error.
   async function creatorTable(request, response, playerId) {
     if (!isUuid(playerId)) {
@@ -185,8 +185,9 @@ export function createApp({
     return table;
   }
 
-  // Pausing lets the current hand finish but starts no new hand until the table is resumed.
-  for (const [path, paused] of [['pause', true], ['resume', false]]) {
+  // A new table waits for its creator to press "Start game" (start). Pausing lets the current hand
+  // finish but starts no new hand until the table is resumed. Start and resume do the same.
+  for (const [path, paused] of [['start', false], ['pause', true], ['resume', false]]) {
     app.post(`/tables/:id/${path}`, withTableId(route(async (request, response) => {
       if (!(await creatorTable(request, response, request.body?.playerId))) return;
       if (!(await live.setPaused(request.tableId, paused))) {

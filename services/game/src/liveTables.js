@@ -42,6 +42,7 @@ export function createLiveTables({
   generateHandId = randomUUID,
   dealOptions = () => ({}),
   onChange = () => {},
+  onRemove = () => {},
   logger = console.log,
 }) {
   const live = new Map(); // table id -> entry
@@ -265,6 +266,7 @@ export function createLiveTables({
         }
         const deleted = await tables.deleteTable(id);
         if (entry) forget(entry);
+        if (deleted) onRemove(id);
         return { status: deleted ? 'deleted' : 'not_found' };
       }),
 

@@ -57,8 +57,8 @@ export function createTablesRepository(pool) {
   return {
     getTable,
 
-    // Creates the table and seats its creator at seat 0. A new code is drawn if the first
-    // one is already taken.
+    // Creates the table, paused until the creator presses "Start game", and seats the creator at
+    // seat 0. A new code is drawn if the first one is already taken.
     async createTable({ settings, createdBy, creatorName, generateId }) {
       for (let attempt = 1; ; attempt++) {
         const id = generateId();
@@ -72,8 +72,8 @@ export function createTablesRepository(pool) {
               .input('startingStack', sql.Int, settings.startingStack)
               .input('maxSeats', sql.TinyInt, settings.maxSeats)
               .input('createdBy', sql.UniqueIdentifier, createdBy)
-              .query(`INSERT INTO dbo.tables (id, small_blind, big_blind, starting_stack, max_seats, created_by)
-                      VALUES (@id, @smallBlind, @bigBlind, @startingStack, @maxSeats, @createdBy)`);
+              .query(`INSERT INTO dbo.tables (id, small_blind, big_blind, starting_stack, max_seats, created_by, paused)
+                      VALUES (@id, @smallBlind, @bigBlind, @startingStack, @maxSeats, @createdBy, 1)`);
             await transaction
               .request()
               .input('id', sql.Char(6), id)
