@@ -131,6 +131,30 @@ describe('useGestures', () => {
     expect(stream.getTracks()[0].stopped).toBe(false);
   });
 
+  it('closes the camera if gestures were turned off before it was allowed', async () => {
+    const stream = fakeStream('camera');
+    let allow;
+    stubCamera(vi.fn(() => new Promise((resolve) => (allow = resolve))));
+    const { result, rerender } = setup();
+    rerender({ enabled: false });
+    expect(result.current.status).toBe('off');
+    await act(async () => allow(stream));
+    expect(stream.getTracks().every((track) => track.stopped)).toBe(true);
+    expect(result.current.status).toBe('off');
+    expect(fake.load).not.toHaveBeenCalled();
+  });
+
+  it('closes the camera if the player left the table before it was allowed', async () => {
+    const stream = fakeStream('camera');
+    let allow;
+    stubCamera(vi.fn(() => new Promise((resolve) => (allow = resolve))));
+    const { unmount } = setup();
+    unmount();
+    await act(async () => allow(stream));
+    expect(stream.getTracks().every((track) => track.stopped)).toBe(true);
+    expect(fake.load).not.toHaveBeenCalled();
+  });
+
   it('explains a blocked camera and can ask again', async () => {
     const denied = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
     const getUserMedia = stubCamera(vi.fn().mockRejectedValueOnce(denied));

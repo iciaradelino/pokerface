@@ -66,7 +66,14 @@ export function useGestures({ enabled, stream = null, turn, onFire, onProgress, 
       if (!camera) {
         try {
           if (!navigator.mediaDevices?.getUserMedia) throw new Error('No getUserMedia');
-          ownStream = await navigator.mediaDevices.getUserMedia(GESTURE_CAMERA);
+          const media = await navigator.mediaDevices.getUserMedia(GESTURE_CAMERA);
+          // Turned off or left the table while the browser was still asking: the cleanup has
+          // already run, so this late camera must be closed here or it would stay on.
+          if (stopped) {
+            media.getTracks().forEach((track) => track.stop());
+            return undefined;
+          }
+          ownStream = media;
           camera = ownStream;
         } catch (err) {
           return fail(cameraProblem(err));
