@@ -70,3 +70,39 @@ The core of Pokerface is No-Limit Texas Hold'em for 2 to 6 players. The rules ar
 - Only `messages.js` knows the §6 formats. If they change, one file changes and the engine does not.
 - The table is a plain object in memory, so a hand in progress is lost if the container scales to zero (see the architecture decision).
 - Simplifications for the MVP: the dealer button moves to the next player with chips, and all remaining hands are shown at showdown (no hiding a losing hand).
+
+
+## Game service architecture: live tables, HTTP and WebSocket
+
+**Status:** accepted, 18 November 2026. **Owner:** Lara. Tables and columns are in [data-model.md](data-model.md); results delivery is in the next record.
+
+### Context
+
+The game service runs private tables of 2 to 6 players with Olivia's engine. Every action has to reach the other players at once, each player may only see their own hole cards, and a turn lasts at most two minutes. The plan deploys each service as an Azure Container App with min 0 / max 1 replica, so the container can scale to zero when nobody plays, and a serverless Azure SQL database that may be paused. The service must keep working when the players service is down.
+
+### Decision
+
+- **The hand in progress lives in memory.** The engine state of each table (deck, hole cards, bets, whose turn it is) is a plain object in the game service. The database keeps what must survive a restart: the table and its settings, the seats with their stacks, and every finished hand with its results.
+- **One replica.** One process owns every table, so there is no shared state between servers. A table is loaded into memory the first time it is used, from its saved seats, stacks and last hand number.
+- **One queue per table.** Every change to a table (join, leave, action, timer, saving a hand) runs in order through its own promise queue, so two requests never interleave on the same table. Different tables do not wait for each other.
+- **A finished hand is saved in one transaction** (the hand, each player's result and the new stacks). If the database fails, the table retries every 3 seconds with the same hand id and starts no new hand until it is saved.
+- **HTTP for actions, WebSocket for state.** The browser sends actions with `POST /tables/:id/actions` and gets a status code: 400 for a malformed request, 409 for a rule violation. The server pushes the public `state` to everyone at the table and a `private` message with each player's own cards over `ws(s)://…/tables/:id/ws?playerId=`. The same socket relays the WebRTC signals for the webcams, with the sender set by the server.
+- **The `ws` package** on the same HTTP server, with an origin check before the upgrade, close codes the UI can act on (4400 bad request, 4403 not seated, 4404 table not found, 1011 database down), a 30-second heartbeat and a 64 KB message limit.
+- **The server runs the table.** A hand starts on its own 5 seconds after two players with chips are seated, unless the creator has not pressed Start game yet or has paused the table. A player who does not act in 2 minutes checks if possible, otherwise folds.
+
+### Alternatives considered
+
+- **Save the hand state after every action.** A restart would not lose the hand, but every action would wait for a database write, a paused serverless database would freeze the game, and the hole cards would have to be stored.
+- **Shared state in Redis to allow several replicas.** Another service to deploy, secure and pay for, and the per-table queue would become a distributed lock. Our load (a few tables of friends) does not need it.
+- **Actions over the WebSocket too.** One channel, but HTTP gives status codes, request validation, request logs and easy tests with supertest, and the UI already used HTTP for everything else.
+- **Polling instead of WebSocket.** The waiting room polled every 3 seconds before the socket existed. It is simple, but a 3-second delay on every action is too slow for a game.
+- **Server-Sent Events.** Push only from the server, so the WebRTC signals from the browser would need another channel.
+- **Socket.IO.** Rooms and reconnection built in, but a heavier library with its own protocol on both sides. The browser's native WebSocket plus `ws` is enough.
+
+### Consequences
+
+- A restart or scale-to-zero loses only the hand in progress. Tables, seats with their stacks and finished hands are kept, and the table continues from the next hand number.
+- The game service cannot scale out: with two replicas, two players at the same table could reach different processes. Max 1 replica is a requirement of this design, not only a cost choice.
+- Rules and timing are tested without a database: the routes and live tables run against an in-memory fake repository with fake timers, and the socket tests use real WebSocket connections.
+- On Azure the UI must use `wss://`, and `UI_ORIGIN` must match the UI's address or the origin check refuses the socket.
+- When the database is down, a finished hand waits in memory until it can be saved; if the container stops during that time, that hand is lost too.
