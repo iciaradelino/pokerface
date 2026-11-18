@@ -8,7 +8,8 @@ const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
 const SOFIA = 'bbbbbbbb-0000-4000-8000-000000000002';
 const ALEX = { id: ME, name: 'Alex', avatar: '#FF5FA2', chips: 1450, gestureSettings: {} };
 
-function makeTable({ createdBy = ME, seats } = {}) {
+// New tables are paused until the host starts the game.
+function makeTable({ createdBy = ME, seats, paused = true } = {}) {
   return {
     id: 'K7QX2M',
     smallBlind: 10,
@@ -17,6 +18,7 @@ function makeTable({ createdBy = ME, seats } = {}) {
     maxSeats: 6,
     createdBy,
     createdAt: '2026-11-12T10:00:00.000Z',
+    paused,
     seats: seats ?? [{ seatIndex: 0, playerId: ME, name: 'Alex', stack: 1000 }],
   };
 }
@@ -88,14 +90,12 @@ describe('WaitingRoomPage', () => {
     expect(JSON.parse(join[1].body)).toEqual({ playerId: ME });
   });
 
-  it('lets the host start only with at least 2 players', async () => {
-    mockServices({
-      'POST /tables/K7QX2M/join': () =>
-        json(200, {
-          table: makeTable({
-            seats: [{ seatIndex: 0, playerId: ME, name: 'Alex', stack: 1000 }, sofiaSeat(1)],
-          }),
-        }),
+  const twoSeats = [{ seatIndex: 0, playerId: ME, name: 'Alex', stack: 1000 }, sofiaSeat(1)];
+
+  it('starts the game for the host with at least 2 players', async () => {
+    const fetch = mockServices({
+      'POST /tables/K7QX2M/join': () => json(200, { table: makeTable({ seats: twoSeats }) }),
+      'POST /tables/K7QX2M/start': () => json(200, makeTable({ seats: twoSeats, paused: false })),
     });
     renderRoom();
 
@@ -103,6 +103,67 @@ describe('WaitingRoomPage', () => {
     expect(screen.queryByText('You need at least 2 players to start.')).toBeNull();
     fireEvent.click(startButton());
     expect(await screen.findByRole('heading', { name: 'Game started' })).toBeInTheDocument();
+
+    const start = fetch.mock.calls.find(([url]) => url.endsWith('/tables/K7QX2M/start'));
+    expect(start[1].method).toBe('POST');
+    expect(JSON.parse(start[1].body)).toEqual({ playerId: ME });
+  });
+
+  it('explains why the game could not start', async () => {
+    mockServices({
+      'POST /tables/K7QX2M/join': () => json(200, { table: makeTable({ seats: twoSeats }) }),
+      'POST /tables/K7QX2M/start': () =>
+        json(403, {
+          code: 'FORBIDDEN',
+          message: 'Only the player who created the table can do this',
+        }),
+    });
+    renderRoom();
+
+    await seatList();
+    fireEvent.click(startButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Only the player who created the table can do this',
+    );
+    expect(startButton()).toBeEnabled();
+  });
+
+  it('moves everyone to the table once the host has started', async () => {
+    const table = makeTable({
+      createdBy: SOFIA,
+      seats: [sofiaSeat(0), { ...twoSeats[0], seatIndex: 1 }],
+    });
+    let started = false;
+    mockServices({
+      'POST /tables/K7QX2M/join': () => json(200, { table }),
+      'GET /tables/K7QX2M': () => json(200, { ...table, paused: !started }),
+    });
+    renderRoom('/tables/K7QX2M', 20);
+
+    await seatList();
+    expect(screen.getByText('Waiting for Sofía to start the game.')).toBeInTheDocument();
+    started = true;
+    expect(await screen.findByRole('heading', { name: 'Game started' })).toBeInTheDocument();
+  });
+
+  it('goes straight to the table when the game is already running', async () => {
+    mockServices({
+      'POST /tables/K7QX2M/join': () =>
+        json(200, { table: makeTable({ seats: twoSeats, paused: false }) }),
+    });
+    renderRoom();
+
+    expect(await screen.findByRole('heading', { name: 'Game started' })).toBeInTheDocument();
+  });
+
+  it('stays in the waiting room when the table does not say it is unpaused', async () => {
+    const { paused, ...withoutPaused } = makeTable({ seats: twoSeats });
+    expect(paused).toBe(true);
+    mockServices({ 'POST /tables/K7QX2M/join': () => json(200, { table: withoutPaused }) });
+    renderRoom();
+
+    expect(await seatList()).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Game started' })).toBeNull();
   });
 
   it('keeps Start game disabled while the host is alone', async () => {

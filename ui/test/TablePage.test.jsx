@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { TablePage } from '../src/pages/TablePage.jsx';
 import { clearPlayerId, savePlayerId } from '../src/player.js';
@@ -257,6 +257,31 @@ describe('TablePage', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(FakeSocket.all).toHaveLength(2);
     vi.useRealTimers();
+  });
+
+  it('stops reconnecting when the table no longer exists', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockServices();
+    const socket = await renderLive();
+
+    socket.drop(4404);
+    expect(screen.getByRole('heading', { name: 'Table not found' })).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeSocket.all).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('stops reconnecting when I am not seated, or the request was malformed', async () => {
+    mockServices();
+    let socket = await renderLive();
+    socket.drop(4403);
+    expect(screen.getByRole('heading', { name: 'You’re not at this table' })).toBeInTheDocument();
+
+    cleanup();
+    FakeSocket.reset();
+    socket = await renderLive();
+    socket.drop(4400);
+    expect(screen.getByRole('heading', { name: 'Table not found' })).toBeInTheDocument();
   });
 
   it('ignores messages it does not understand', async () => {

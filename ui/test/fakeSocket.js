@@ -29,9 +29,9 @@ export class FakeSocket {
     act(() => this.onmessage?.({ data: JSON.stringify(message) }));
   }
 
-  /** The server or network dropped the connection. */
-  drop() {
-    act(() => this.onclose?.());
+  /** The server or network dropped the connection. 1006 is an abnormal close (no reason). */
+  drop(code = 1006) {
+    act(() => this.onclose?.({ code }));
   }
 
   close() {

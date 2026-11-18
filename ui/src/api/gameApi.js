@@ -14,6 +14,11 @@ export const gameApi = {
   createTable: (playerId, settings = {}) =>
     game('/tables', { method: 'POST', body: { playerId, ...settings } }),
   getTable: (id) => game(table(id)),
+  /**
+   * Starts the game. Tables are created paused, so no hand is dealt until the creator calls
+   * this. Returns the table with paused: false. 403 for anyone but the creator.
+   */
+  startTable: (id, playerId) => game(`${table(id)}/start`, { method: 'POST', body: { playerId } }),
   /** Only the player who created the table may delete it. */
   deleteTable: (id, playerId) =>
     game(`${table(id)}?playerId=${encodeURIComponent(playerId)}`, { method: 'DELETE' }),
