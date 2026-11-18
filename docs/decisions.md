@@ -106,3 +106,24 @@ The game service runs private tables of 2 to 6 players with Olivia's engine. Eve
 - Rules and timing are tested without a database: the routes and live tables run against an in-memory fake repository with fake timers, and the socket tests use real WebSocket connections.
 - On Azure the UI must use `wss://`, and `UI_ORIGIN` must match the UI's address or the origin check refuses the socket.
 - When the database is down, a finished hand waits in memory until it can be saved; if the container stops during that time, that hand is lost too.
+
+---
+
+## Azure deployment and pipeline
+
+### Context
+
+We need to deploy the same commit that passed CI and be able to repeat the deployment inside our assigned Azure resource group.
+
+### Decision
+
+We use Bicep and GitHub Actions. After CI passes on `main`, the deploy job publishes both backend images to GHCR with the commit SHA as the tag. It signs in to Azure using the group's managed identity and OIDC. Bicep sets up the shared hosting resources first, then the pipeline creates a separate user in each database and deploys both Container Apps. The services run their migrations at startup. The workflow builds and uploads the UI with the deployed backend URLs, then checks both health endpoints and the UI.
+
+### Alternatives considered
+
+- Manual portal setup would get the first version online, but it would be harder to reproduce and review than Bicep.
+- A shared SQL admin login would be simpler to wire up, but each service would have access to both databases.
+
+### Consequences
+
+The two images must be public so Container Apps can pull them without a registry password. SQL credentials live in GitHub and Azure secrets. The first deployment needs the professor's identity setup and an explicit repository opt-in. Deployments fail if either backend does not report the expected version or the live UI cannot be reached before the smoke test times out.

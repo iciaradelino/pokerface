@@ -75,7 +75,15 @@ docker compose exec -T game node --input-type=module < scripts/check-database.mj
 
 ### Azure deployment
 
-We are class 3A, group 5. We will use `rg-sdd-3a-g5` and name our resources with the prefix `sdd-3a-g5`. We still need the professor's group credentials and must verify access to the resource group. We will store the credentials in GitHub Actions secrets, then set up Bicep and CI/CD in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
+Pokerface deploys to `rg-sdd-3a-g5` in IE's Azure subscription (West Europe). The [Bicep templates](infra/) create two Container Apps, two serverless SQL databases, a Static Web App, and the Container Apps logging workspace. CI runs first, then the deploy job builds and publishes SHA-tagged images, deploys the app, and checks both health endpoints and the UI.
+
+To enable the first deployment:
+
+1. Wait for IE to confirm that `sdd-3a-g5-github` can deploy to our resource group and trusts `iciaradelino/pokerface` on `main`. Add its client, tenant and subscription IDs as GitHub Actions secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`. This uses OIDC, so there is no Azure client password.
+2. Add three distinct generated passwords as Actions secrets: `SQL_ADMIN_PASSWORD`, `PLAYERS_DB_PASSWORD` and `GAME_DB_PASSWORD`. Generate a fresh value for each (for example, `printf 'Pf-%s-9!\n' "$(openssl rand -hex 24)"`). Keep the service passwords stable between runs; changing a service password requires rotating the matching SQL user.
+3. Set the Actions variable `AZURE_DEPLOY_ENABLED` to `true` and run **CI** on `main` from the Actions tab. Subsequent pushes to `main` deploy automatically if CI passes. On first publication, GitHub may create the two GHCR packages as private: make `pokerface-players` and `pokerface-game` public, then rerun the failed deploy job. It checks that Azure can pull both images anonymously before creating resources.
+
+The first successful deployment and live URL are tracked in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
 
 See the [architecture guide](docs/architecture.md) for code locations, plus our [Definition of Done](docs/scrum/definition-of-done.md) and [Sprint 0 record](docs/scrum/sprint-0.md).
 
