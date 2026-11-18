@@ -1,0 +1,93 @@
+name: Deploy to Azure
+
+on:
+  workflow_call:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: pokerface-azure
+      cancel-in-progress: false
+    env:
+      APP_VERSION: ${{ github.sha }}
+      IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check that this is still the latest main
+        id: release
+        run: |
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$latest" = "$APP_VERSION" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Skipping deploy: main has moved on.'
+          fi
+      - uses: actions/setup-node@v7.1.0
+        if: steps.release.outputs.current == 'true'
+        with:
+          node-version: 22
+      - name: Publish service images
+        if: steps.release.outputs.current == 'true'
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          for service in players game; do
+            image="$IMAGE_PREFIX-$service:$APP_VERSION"
+            docker build --tag "$image" "services/$service"
+            docker push "$image"
+          done
+          docker logout ghcr.io
+          for service in players game; do
+            if ! docker manifest inspect "$IMAGE_PREFIX-$service:$APP_VERSION" > /dev/null; then
+              echo "::error::The $service package must be public so Azure can pull it. Change the package visibility, then rerun this job."
+              exit 1
+            fi
+          done
+      - uses: azure/login@v3.1.0
+        if: steps.release.outputs.current == 'true'
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy infrastructure and services
+        if: steps.release.outputs.current == 'true'
+        env:
+          SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
+          PLAYERS_DB_PASSWORD: ${{ secrets.PLAYERS_DB_PASSWORD }}
+          GAME_DB_PASSWORD: ${{ secrets.GAME_DB_PASSWORD }}
+        run: |
+          az bicep install
+          npm ci --prefix services/game --omit=dev
+          bash infra/deploy.sh
+      - name: Build the UI
+        if: steps.release.outputs.current == 'true'
+        working-directory: ui
+        run: |
+          npm ci
+          VITE_PLAYERS_URL="$PLAYERS_BASE_URL" VITE_GAME_URL="$GAME_BASE_URL" npm run build
+      - name: Read the Static Web App upload token
+        if: steps.release.outputs.current == 'true'
+        id: ui
+        run: |
+          token=$(az staticwebapp secrets list --resource-group rg-sdd-3a-g5 --name sdd-3a-g5-ui --query properties.apiKey -o tsv)
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - uses: Azure/static-web-apps-deploy@v1
+        if: steps.release.outputs.current == 'true'
+        with:
+          action: upload
+          azure_static_web_apps_api_token: ${{ steps.ui.outputs.token }}
+          app_location: ui/dist
+          output_location: ''
+          skip_app_build: true
+          production_branch: main
+      - name: Smoke test the live deployment
+        if: steps.release.outputs.current == 'true'
+        run: |
+          timeout 240 bash -c 'until node scripts/smoke.mjs; do sleep 10; done'

@@ -81,7 +81,7 @@ Everyone adds their own AI-assisted work to `AI_USAGE.md` and reviews others' PR
 - [ ] GitHub Project with user stories + acceptance criteria. `definition-of-done.md` (§5).
 - [ ] Agree on contracts (§6) and the repo layout (§7).
 - [ ] `docker compose up` brings everything up, and both `/health` endpoints return 200.
-- [ ] Group service principal stored as GitHub secrets.
+- [ ] GitHub Actions configured to use the group's Azure managed identity.
 
 **Sprint 1 (11–18 Nov): pipeline, then the first feature end to end**
 - [ ] **Days 1–2: Hello World deployed to Azure by the pipeline.** Nothing else gets merged until this works.
@@ -124,7 +124,7 @@ Everyone adds their own AI-assisted work to `AI_USAGE.md` and reviews others' PR
   - 2 serverless SQL DBs (Gen5, 0.5–1 vCore, shortest auto-pause, 2 GB, locally redundant backups).
   - 1 Static Web App.
 - [ ] One SQL login per service, with access to its own DB only. Firewall allows Azure services.
-- [ ] Use the **group's** service principal. Config only through environment variables and secrets. No manual changes after setup. No other Azure services or platforms.
+- [ ] Use the **group's** managed identity through GitHub OIDC. Config only through environment variables and secrets. No manual changes after setup. No other Azure services or platforms.
 
 **CI/CD**
 - [ ] CI on every PR and push: lint, format check, tests with coverage (fail below 70%), image build. Uses a SQL Server container, **never the Azure DB**.
