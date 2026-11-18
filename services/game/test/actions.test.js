@@ -62,7 +62,7 @@ describe('POST /tables/:id/actions', () => {
     expect(tables.hands).toHaveLength(1);
   });
 
-  it('answers with the public state and only the acting player\'s cards', async () => {
+  it("answers with the public state and only the acting player's cards", async () => {
     await startHand();
     const player = await whoActs();
     const response = await act({ playerId: player, action: 'call' });
@@ -111,7 +111,9 @@ describe('POST /tables/:id/actions', () => {
   });
 
   it('returns 503 without details when something unexpected fails', async () => {
-    live.act = async () => { throw new Error('private details'); };
+    live.act = async () => {
+      throw new Error('private details');
+    };
     const response = await act({ playerId: ana, action: 'fold' });
     expect(response.status).toBe(503);
     expect(response.text).not.toContain('private');

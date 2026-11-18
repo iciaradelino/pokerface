@@ -49,8 +49,7 @@ export function createPlayersRepository(pool) {
           'settings',
           sql.NVarChar(sql.MAX),
           gestureSettings === undefined ? null : JSON.stringify(gestureSettings),
-        )
-        .query(`UPDATE dbo.players
+        ).query(`UPDATE dbo.players
                 SET name = @name,
                     avatar = COALESCE(@avatar, avatar),
                     gesture_settings = COALESCE(@settings, gesture_settings),
@@ -109,9 +108,9 @@ export function createPlayersRepository(pool) {
 
     // Top 10 by chips (issue #15), ties broken by name.
     async leaderboard() {
-      const result = await pool.request().query(
-        'SELECT TOP 10 id, name, chips FROM dbo.players ORDER BY chips DESC, name ASC',
-      );
+      const result = await pool
+        .request()
+        .query('SELECT TOP 10 id, name, chips FROM dbo.players ORDER BY chips DESC, name ASC');
       return result.recordset.map((row) => ({
         id: row.id.toLowerCase(),
         name: row.name,

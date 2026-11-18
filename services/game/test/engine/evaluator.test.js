@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  Category,
-  compareScores,
-  evaluateBest,
-} from '../../src/engine/evaluator.js';
+import { Category, compareScores, evaluateBest } from '../../src/engine/evaluator.js';
 
 const best = (cards) => evaluateBest(cards.split(' '));
 const beats = (a, b) => compareScores(best(a).score, best(b).score) > 0;

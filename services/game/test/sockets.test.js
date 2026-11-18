@@ -43,7 +43,12 @@ beforeEach(async () => {
   server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   port = server.address().port;
-  sockets = attachTableSockets({ server, live, uiOrigin: UI, logger: (l) => logs.push(JSON.parse(l)) });
+  sockets = attachTableSockets({
+    server,
+    live,
+    uiOrigin: UI,
+    logger: (l) => logs.push(JSON.parse(l)),
+  });
   await request(server).post('/tables').send({ playerId: ana });
 });
 
@@ -62,7 +67,9 @@ function connect(playerId, { code = 'K7QX2M', origin = UI } = {}) {
   });
   ws.messages = [];
   ws.on('message', (data) => ws.messages.push(JSON.parse(data.toString())));
-  ws.closed = new Promise((resolve) => ws.on('close', (closeCode, reason) => resolve({ code: closeCode, reason: reason.toString() })));
+  ws.closed = new Promise((resolve) =>
+    ws.on('close', (closeCode, reason) => resolve({ code: closeCode, reason: reason.toString() })),
+  );
   ws.on('error', () => {});
   open.push(ws);
   return ws;
@@ -93,14 +100,18 @@ describe('connecting', () => {
 
   it('refuses another origin before opening the connection', async () => {
     const ws = connect(ana, { origin: 'https://evil.example' });
-    const status = await new Promise((resolve) => ws.on('unexpected-response', (_req, res) => resolve(res.statusCode)));
+    const status = await new Promise((resolve) =>
+      ws.on('unexpected-response', (_req, res) => resolve(res.statusCode)),
+    );
     expect(status).toBe(403);
     expect(logs.at(-1).status).toBe(403);
   });
 
   it('refuses a request without an origin', async () => {
     const ws = connect(ana, { origin: null });
-    const status = await new Promise((resolve) => ws.on('unexpected-response', (_req, res) => resolve(res.statusCode)));
+    const status = await new Promise((resolve) =>
+      ws.on('unexpected-response', (_req, res) => resolve(res.statusCode)),
+    );
     expect(status).toBe(403);
   });
 
@@ -108,7 +119,9 @@ describe('connecting', () => {
     const ws = new WebSocket(`ws://localhost:${port}/nothing`, { headers: { Origin: UI } });
     ws.on('error', () => {});
     open.push(ws);
-    const status = await new Promise((resolve) => ws.on('unexpected-response', (_req, res) => resolve(res.statusCode)));
+    const status = await new Promise((resolve) =>
+      ws.on('unexpected-response', (_req, res) => resolve(res.statusCode)),
+    );
     expect(status).toBe(404);
   });
 
@@ -125,7 +138,9 @@ describe('connecting', () => {
 
   it('closes the socket when the database is down, with a code the UI keeps retrying on', async () => {
     live.close();
-    tables.getTable = async () => { throw new Error('down'); };
+    tables.getTable = async () => {
+      throw new Error('down');
+    };
     const ws = connect(ana);
     const { code } = await ws.closed;
     // The server closes with 1011. On a busy machine the client can see the connection drop
@@ -133,12 +148,14 @@ describe('connecting', () => {
     // reconnects, which is what matters while the database is down.
     expect([1011, 1006]).toContain(code);
     expect(ws.messages).toEqual([]);
-    expect(logs).toContainEqual(expect.objectContaining({ path: '/tables/K7QX2M/ws', status: 1011 }));
+    expect(logs).toContainEqual(
+      expect.objectContaining({ path: '/tables/K7QX2M/ws', status: 1011 }),
+    );
   });
 });
 
 describe('live updates', () => {
-  it('tells everyone when a player joins and when a hand starts, with each player\'s own cards', async () => {
+  it("tells everyone when a player joins and when a hand starts, with each player's own cards", async () => {
     const anaWs = connect(ana);
     await until(() => last(anaWs, 'private'), 'Ana connected');
     await join(ben);
@@ -153,7 +170,9 @@ describe('live updates', () => {
     expect(anaCards).not.toEqual(benCards);
     // Nobody ever receives another player's private message or cards.
     expect(anaWs.messages.every((m) => m.type !== 'private' || m.playerId === ana)).toBe(true);
-    expect(JSON.stringify(anaWs.messages.filter((m) => m.type === 'state'))).not.toContain(benCards[0]);
+    expect(JSON.stringify(anaWs.messages.filter((m) => m.type === 'state'))).not.toContain(
+      benCards[0],
+    );
     expect(last(anaWs, 'state').timerEndsAt).toEqual(expect.any(String));
   });
 
@@ -161,7 +180,10 @@ describe('live updates', () => {
     await join(ben);
     const tab1 = connect(ana);
     const tab2 = connect(ana);
-    await until(() => last(tab1, 'state')?.stage === 'preflop' && last(tab2, 'state')?.stage === 'preflop', 'the hand');
+    await until(
+      () => last(tab1, 'state')?.stage === 'preflop' && last(tab2, 'state')?.stage === 'preflop',
+      'the hand',
+    );
     const game = await live.get('K7QX2M');
     const player = game.hand.players[game.hand.toAct].id;
     const before = tab2.messages.length;
@@ -190,7 +212,10 @@ describe('live updates', () => {
     await join(ben);
     live.close(); // As after a scale-to-zero: nothing in memory.
     const ws = connect(ana);
-    await until(() => last(ws, 'state')?.stage === 'preflop', 'the hand to start after reconnecting');
+    await until(
+      () => last(ws, 'state')?.stage === 'preflop',
+      'the hand to start after reconnecting',
+    );
   });
 });
 
@@ -244,7 +269,9 @@ describe('robustness', () => {
 
     anaWs.send('x'.repeat(70 * 1024));
     expect((await anaWs.closed).code).toBe(1009); // Message too big.
-    expect(logs).toContainEqual(expect.objectContaining({ event: 'socket_error', code: 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH' }));
+    expect(logs).toContainEqual(
+      expect.objectContaining({ event: 'socket_error', code: 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH' }),
+    );
 
     // The service and the other players are unaffected.
     expect((await request(server).get('/health')).status).toBe(200);
@@ -261,8 +288,13 @@ describe('robustness', () => {
     // Slow down the membership lookup, so Cleo's socket is open but not yet checked.
     const realGet = live.get;
     let release;
-    const lookupDone = new Promise((resolve) => { release = resolve; });
-    live.get = async (id) => { await lookupDone; return realGet(id); };
+    const lookupDone = new Promise((resolve) => {
+      release = resolve;
+    });
+    live.get = async (id) => {
+      await lookupDone;
+      return realGet(id);
+    };
 
     const cleoWs = connect(cleo); // Cleo is not seated.
     await new Promise((resolve) => cleoWs.once('open', resolve));

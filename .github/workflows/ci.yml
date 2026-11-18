@@ -1,0 +1,47 @@
+name: CI
+
+on: [pull_request, push]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [services/players, services/game, ui]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:coverage
+      - run: npm audit --omit=dev --audit-level=high
+
+  compose:
+    name: Compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_VERSION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - run: node scripts/setup-local.mjs
+      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: node scripts/smoke.mjs
+      - if: failure()
+        run: docker compose logs --tail=100
+      - if: always()
+        run: docker compose down --volumes

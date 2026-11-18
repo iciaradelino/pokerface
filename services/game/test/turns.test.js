@@ -64,7 +64,7 @@ describe('acting', () => {
     expect(tables.hands[0].deltas.reduce((sum, d) => sum + d.delta, 0)).toBe(0);
   });
 
-  it('returns the public state and the acting player\'s private view', async () => {
+  it("returns the public state and the acting player's private view", async () => {
     const game = await live.get('K7QX2M');
     const player = toAct(game);
     const result = await live.act('K7QX2M', player, { action: 'call' });

@@ -16,8 +16,7 @@ beforeEach(() => {
   app = createApp({ checkDatabase: async () => {}, players, uiOrigin, logger: () => {} });
 });
 
-const createPlayer = async (name) =>
-  (await request(app).post('/players').send({ name })).body;
+const createPlayer = async (name) => (await request(app).post('/players').send({ name })).body;
 const saveResult = (id, body) => request(app).post(`/players/${id}/results`).send(body);
 
 describe('POST /players/:id/results', () => {

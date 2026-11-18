@@ -28,20 +28,26 @@ export function createApp({
   app.disable('x-powered-by');
   app.use((request, response, next) => {
     const started = performance.now();
-    response.on('finish', () => logger(JSON.stringify({
-      level: 'info',
-      event: 'request',
-      method: request.method,
-      path: request.path,
-      status: response.statusCode,
-      durationMs: Math.round((performance.now() - started) * 100) / 100,
-    })));
+    response.on('finish', () =>
+      logger(
+        JSON.stringify({
+          level: 'info',
+          event: 'request',
+          method: request.method,
+          path: request.path,
+          status: response.statusCode,
+          durationMs: Math.round((performance.now() - started) * 100) / 100,
+        }),
+      ),
+    );
     next();
   });
-  app.use(cors({
-    origin: (origin, callback) => callback(null, origin === uiOrigin),
-    methods: ['GET', 'POST', 'DELETE'],
-  }));
+  app.use(
+    cors({
+      origin: (origin, callback) => callback(null, origin === uiOrigin),
+      methods: ['GET', 'POST', 'DELETE'],
+    }),
+  );
   app.use(express.json({ limit: '10kb' }));
 
   app.get('/health', async (_request, response) => {
@@ -70,104 +76,141 @@ export function createApp({
   // the database.
   const withTableId = (handler) => (request, response) => {
     const id = normalizeTableId(request.params.id);
-    if (!id) return sendError(response, 400, 'INVALID_INPUT', 'Table code must be 6 letters or digits');
+    if (!id)
+      return sendError(response, 400, 'INVALID_INPUT', 'Table code must be 6 letters or digits');
     request.tableId = id;
     return handler(request, response);
   };
 
-  app.post('/tables', route(async (request, response) => {
-    const { value, error } = validateCreateTableInput(request.body);
-    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
-    const player = await players.getPlayer(value.playerId);
-    if (!player) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
-    const table = await tables.createTable({
-      settings: value.settings,
-      createdBy: value.playerId,
-      creatorName: player.name,
-      generateId,
-    });
-    response.status(201).json(table);
-  }));
+  app.post(
+    '/tables',
+    route(async (request, response) => {
+      const { value, error } = validateCreateTableInput(request.body);
+      if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+      const player = await players.getPlayer(value.playerId);
+      if (!player) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
+      const table = await tables.createTable({
+        settings: value.settings,
+        createdBy: value.playerId,
+        creatorName: player.name,
+        generateId,
+      });
+      response.status(201).json(table);
+    }),
+  );
 
-  app.get('/tables/:id', withTableId(route(async (request, response) => {
-    const table = await tables.getTable(request.tableId);
-    if (!table) return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    response.json(table);
-  })));
+  app.get(
+    '/tables/:id',
+    withTableId(
+      route(async (request, response) => {
+        const table = await tables.getTable(request.tableId);
+        if (!table) return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        response.json(table);
+      }),
+    ),
+  );
 
   // Joining twice (e.g. after a page reload) is not an error: the player gets their seat back.
-  app.post('/tables/:id/join', withTableId(route(async (request, response) => {
-    const { value, error } = validateJoinInput(request.body);
-    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
-    const { playerId } = value;
+  app.post(
+    '/tables/:id/join',
+    withTableId(
+      route(async (request, response) => {
+        const { value, error } = validateJoinInput(request.body);
+        if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+        const { playerId } = value;
 
-    const table = await tables.getTable(request.tableId);
-    if (!table) return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    const mine = table.seats.find((seat) => seat.playerId === playerId);
-    if (mine) {
-      return response.json({
-        table,
-        seatIndex: mine.seatIndex,
-        alreadySeated: true,
-        message: 'You are already at this table',
-      });
-    }
-    if (table.seats.length >= table.maxSeats) {
-      return sendError(response, 409, 'TABLE_FULL', 'This table is full');
-    }
+        const table = await tables.getTable(request.tableId);
+        if (!table) return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        const mine = table.seats.find((seat) => seat.playerId === playerId);
+        if (mine) {
+          return response.json({
+            table,
+            seatIndex: mine.seatIndex,
+            alreadySeated: true,
+            message: 'You are already at this table',
+          });
+        }
+        if (table.seats.length >= table.maxSeats) {
+          return sendError(response, 409, 'TABLE_FULL', 'This table is full');
+        }
 
-    const player = await players.getPlayer(playerId);
-    if (!player) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
+        const player = await players.getPlayer(playerId);
+        if (!player) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
 
-    const result = await live.join(request.tableId, { playerId, playerName: player.name });
-    if (result.status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    if (result.status === 'full') return sendError(response, 409, 'TABLE_FULL', 'This table is full');
-    if (result.status === 'chip_limit') {
-      return sendError(response, 409, 'TABLE_CHIP_LIMIT', 'This table has reached its chip limit');
-    }
-    const alreadySeated = result.status === 'already_seated';
-    response.json({
-      table: await tables.getTable(request.tableId),
-      seatIndex: result.seatIndex,
-      alreadySeated,
-      ...(alreadySeated && { message: 'You are already at this table' }),
-    });
-  })));
+        const result = await live.join(request.tableId, { playerId, playerName: player.name });
+        if (result.status === 'not_found')
+          return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        if (result.status === 'full')
+          return sendError(response, 409, 'TABLE_FULL', 'This table is full');
+        if (result.status === 'chip_limit') {
+          return sendError(
+            response,
+            409,
+            'TABLE_CHIP_LIMIT',
+            'This table has reached its chip limit',
+          );
+        }
+        const alreadySeated = result.status === 'already_seated';
+        response.json({
+          table: await tables.getTable(request.tableId),
+          seatIndex: result.seatIndex,
+          alreadySeated,
+          ...(alreadySeated && { message: 'You are already at this table' }),
+        });
+      }),
+    ),
+  );
 
   // A player acts: { playerId, action: check | call | fold | raise | allin, amount? }. `amount`
   // is the "raise to" total. Answers with the new state, which the WebSocket also sends.
   // 400 for a malformed action, 409 when it breaks the rules (not your turn, no hand...).
-  app.post('/tables/:id/actions', withTableId(route(async (request, response) => {
-    const { value, error } = validateJoinInput(request.body);
-    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
-    let result;
-    try {
-      result = await live.act(request.tableId, value.playerId, request.body);
-    } catch (engineError) {
-      if (!(engineError instanceof EngineError)) throw engineError;
-      return sendError(response, httpStatusFor(engineError), engineError.code, engineError.message);
-    }
-    if (result.status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    response.json({ state: result.state, private: result.private });
-  })));
+  app.post(
+    '/tables/:id/actions',
+    withTableId(
+      route(async (request, response) => {
+        const { value, error } = validateJoinInput(request.body);
+        if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+        let result;
+        try {
+          result = await live.act(request.tableId, value.playerId, request.body);
+        } catch (engineError) {
+          if (!(engineError instanceof EngineError)) throw engineError;
+          return sendError(
+            response,
+            httpStatusFor(engineError),
+            engineError.code,
+            engineError.message,
+          );
+        }
+        if (result.status === 'not_found')
+          return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        response.json({ state: result.state, private: result.private });
+      }),
+    ),
+  );
 
   // Leaving mid-hand folds the player; their seat is freed when the hand ends.
-  app.post('/tables/:id/leave', withTableId(route(async (request, response) => {
-    const { value, error } = validateJoinInput(request.body);
-    if (error) return sendError(response, 400, 'INVALID_INPUT', error);
-    const { status } = await live.leave(request.tableId, value.playerId);
-    if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    if (status === 'not_seated') {
-      return sendError(response, 404, 'NOT_SEATED', 'You are not at this table');
-    }
-    if (status === 'leaving') {
-      return response.json({
-        leftNow: false,
-        message: 'You folded and will leave the table when this hand ends',
-      });
-    }
-    response.json({ leftNow: true });
-  })));
+  app.post(
+    '/tables/:id/leave',
+    withTableId(
+      route(async (request, response) => {
+        const { value, error } = validateJoinInput(request.body);
+        if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+        const { status } = await live.leave(request.tableId, value.playerId);
+        if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        if (status === 'not_seated') {
+          return sendError(response, 404, 'NOT_SEATED', 'You are not at this table');
+        }
+        if (status === 'leaving') {
+          return response.json({
+            leftNow: false,
+            message: 'You folded and will leave the table when this hand ends',
+          });
+        }
+        response.json({ leftNow: true });
+      }),
+    ),
+  );
 
   // Only the creator may start, pause, resume or delete a table. Returns the table, or null after
   // sending the error.
@@ -190,41 +233,55 @@ export function createApp({
 
   // A new table waits for its creator to press "Start game" (start). Pausing lets the current hand
   // finish but starts no new hand until the table is resumed. Start and resume do the same.
-  for (const [path, paused] of [['start', false], ['pause', true], ['resume', false]]) {
-    app.post(`/tables/:id/${path}`, withTableId(route(async (request, response) => {
-      if (!(await creatorTable(request, response, request.body?.playerId))) return;
-      if (!(await live.setPaused(request.tableId, paused))) {
-        return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-      }
-      response.json(await tables.getTable(request.tableId));
-    })));
+  for (const [path, paused] of [
+    ['start', false],
+    ['pause', true],
+    ['resume', false],
+  ]) {
+    app.post(
+      `/tables/:id/${path}`,
+      withTableId(
+        route(async (request, response) => {
+          if (!(await creatorTable(request, response, request.body?.playerId))) return;
+          if (!(await live.setPaused(request.tableId, paused))) {
+            return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+          }
+          response.json(await tables.getTable(request.tableId));
+        }),
+      ),
+    );
   }
 
   // DELETE /tables/:id?playerId=... Not while a hand is being played: pause the table, let the
   // hand finish, then delete it. Not while its results are still on their way to the players
   // service either, since deleting the table would delete them too.
-  app.delete('/tables/:id', withTableId(route(async (request, response) => {
-    if (!(await creatorTable(request, response, request.query.playerId))) return;
-    const { status } = await live.remove(request.tableId);
-    if (status === 'hand_in_progress') {
-      return sendError(
-        response,
-        409,
-        'HAND_IN_PROGRESS',
-        'Pause the table and let the current hand finish before deleting it',
-      );
-    }
-    if (status === 'results_pending') {
-      return sendError(
-        response,
-        409,
-        'RESULTS_PENDING',
-        'Results of this table are still being sent to the player service. Try again in a minute',
-      );
-    }
-    if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
-    response.status(204).end();
-  })));
+  app.delete(
+    '/tables/:id',
+    withTableId(
+      route(async (request, response) => {
+        if (!(await creatorTable(request, response, request.query.playerId))) return;
+        const { status } = await live.remove(request.tableId);
+        if (status === 'hand_in_progress') {
+          return sendError(
+            response,
+            409,
+            'HAND_IN_PROGRESS',
+            'Pause the table and let the current hand finish before deleting it',
+          );
+        }
+        if (status === 'results_pending') {
+          return sendError(
+            response,
+            409,
+            'RESULTS_PENDING',
+            'Results of this table are still being sent to the player service. Try again in a minute',
+          );
+        }
+        if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        response.status(204).end();
+      }),
+    ),
+  );
 
   app.use((_request, response) => sendError(response, 404, 'NOT_FOUND', 'Not found'));
 
@@ -233,7 +290,12 @@ export function createApp({
   app.use((error, _request, response, _next) => {
     const status = error.status ?? error.statusCode;
     if (error.type === 'entity.parse.failed' || error.type === 'entity.too.large') {
-      return sendError(response, 400, 'INVALID_INPUT', 'Request body is not valid JSON or is too large');
+      return sendError(
+        response,
+        400,
+        'INVALID_INPUT',
+        'Request body is not valid JSON or is too large',
+      );
     }
     if (status >= 400 && status < 500) {
       return sendError(response, 400, 'INVALID_INPUT', 'Invalid request');

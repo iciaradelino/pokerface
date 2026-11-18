@@ -145,7 +145,10 @@ describe('saveResult', () => {
 describe('leaderboard', () => {
   it('returns id, name and chips with lower-case ids', async () => {
     const pool = fakePool(() => ({
-      recordset: [row({ chips: 1250 }), row({ id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA', name: 'Ana', chips: 900 })],
+      recordset: [
+        row({ chips: 1250 }),
+        row({ id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA', name: 'Ana', chips: 900 }),
+      ],
     }));
     const board = await createPlayersRepository(pool).leaderboard();
     expect(board).toEqual([

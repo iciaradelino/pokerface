@@ -25,17 +25,27 @@ describe('playersClient.getPlayer', () => {
     ['a 5xx', async () => json(503, { code: 'UNAVAILABLE' })],
     ['a body without a name', async () => json(200, { id })],
     ['a body that is not JSON', async () => new Response('oops', { status: 200 })],
-    ['a network failure', async () => { throw new TypeError('fetch failed'); }],
+    [
+      'a network failure',
+      async () => {
+        throw new TypeError('fetch failed');
+      },
+    ],
   ])('treats %s as unavailable', async (_label, fetchImpl) => {
     const client = createPlayersClient({ baseUrl: 'http://players:3000', fetchImpl });
     await expect(client.getPlayer(id)).rejects.toBeInstanceOf(PlayersUnavailableError);
   });
 
   it('gives up after the timeout instead of hanging', async () => {
-    const fetchImpl = (_url, { signal }) => new Promise((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(signal.reason));
+    const fetchImpl = (_url, { signal }) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason));
+      });
+    const client = createPlayersClient({
+      baseUrl: 'http://players:3000',
+      timeoutMs: 50,
+      fetchImpl,
     });
-    const client = createPlayersClient({ baseUrl: 'http://players:3000', timeoutMs: 50, fetchImpl });
     const started = Date.now();
     const error = await client.getPlayer(id).catch((e) => e);
     expect(error).toBeInstanceOf(PlayersUnavailableError);
@@ -47,7 +57,6 @@ describe('playersClient.getPlayer', () => {
     expect(() => createPlayersClient({ baseUrl: undefined })).toThrow('PLAYERS_URL');
   });
 });
-
 
 describe('playersClient.saveResult', () => {
   const result = { handId: '11111111-1111-4111-8111-111111111111', delta: -20 };
@@ -64,12 +73,20 @@ describe('playersClient.saveResult', () => {
   });
 
   it('reports a deleted player', async () => {
-    const client = createPlayersClient({ baseUrl: 'http://players:3000', fetchImpl: async () => json(404, {}) });
+    const client = createPlayersClient({
+      baseUrl: 'http://players:3000',
+      fetchImpl: async () => json(404, {}),
+    });
     expect(await client.saveResult(id, result)).toBe('not_found');
   });
 
   it('treats a 5xx or a network failure as unavailable', async () => {
-    for (const fetchImpl of [async () => json(503, {}), async () => { throw new TypeError('fetch failed'); }]) {
+    for (const fetchImpl of [
+      async () => json(503, {}),
+      async () => {
+        throw new TypeError('fetch failed');
+      },
+    ]) {
       const client = createPlayersClient({ baseUrl: 'http://players:3000', fetchImpl });
       await expect(client.saveResult(id, result)).rejects.toBeInstanceOf(PlayersUnavailableError);
     }
@@ -80,9 +97,11 @@ describe('playersClient.saveResult with a refused result', () => {
   it('reports a 4xx other than 404 as rejected, not unavailable', async () => {
     const client = createPlayersClient({
       baseUrl: 'http://players:3000',
-      fetchImpl: async () => json(400, { message: 'delta must be an integer', code: 'INVALID_INPUT' }),
+      fetchImpl: async () =>
+        json(400, { message: 'delta must be an integer', code: 'INVALID_INPUT' }),
     });
-    expect(await client.saveResult(id, { handId: '11111111-1111-4111-8111-111111111111', delta: 2e9 }))
-      .toBe('rejected');
+    expect(
+      await client.saveResult(id, { handId: '11111111-1111-4111-8111-111111111111', delta: 2e9 }),
+    ).toBe('rejected');
   });
 });

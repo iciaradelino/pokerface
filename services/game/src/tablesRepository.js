@@ -41,15 +41,11 @@ async function inTransaction(pool, work) {
 
 export function createTablesRepository(pool) {
   async function getTable(id) {
-    const tables = await pool
-      .request()
-      .input('id', sql.Char(6), id)
+    const tables = await pool.request().input('id', sql.Char(6), id)
       .query(`SELECT id, small_blind, big_blind, starting_stack, max_seats, paused, created_by, created_at
               FROM dbo.tables WHERE id = @id`);
     if (!tables.recordset[0]) return null;
-    const seats = await pool
-      .request()
-      .input('id', sql.Char(6), id)
+    const seats = await pool.request().input('id', sql.Char(6), id)
       .query(`SELECT seat_index, player_id, player_name, stack
               FROM dbo.seats WHERE table_id = @id ORDER BY seat_index`);
     return toTable(tables.recordset[0], seats.recordset);
@@ -99,9 +95,7 @@ export function createTablesRepository(pool) {
     // 'chip_limit' | 'not_found' }.
     async joinTable(id, { playerId, playerName }) {
       return inTransaction(pool, async (transaction) => {
-        const tables = await transaction
-          .request()
-          .input('id', sql.Char(6), id)
+        const tables = await transaction.request().input('id', sql.Char(6), id)
           .query(`SELECT max_seats, starting_stack FROM dbo.tables WITH (UPDLOCK, HOLDLOCK)
                   WHERE id = @id`);
         const table = tables.recordset[0];
@@ -180,9 +174,7 @@ export function createTablesRepository(pool) {
 
     /** Hand results the players service has not received yet (oldest hands first). */
     async getUnsentResults(limit) {
-      const result = await pool
-        .request()
-        .input('limit', sql.Int, limit)
+      const result = await pool.request().input('limit', sql.Int, limit)
         .query(`SELECT TOP (@limit) r.hand_id, r.player_id, r.delta
                 FROM dbo.hand_players AS r
                 JOIN dbo.hands AS h ON h.id = r.hand_id
@@ -217,9 +209,7 @@ export function createTablesRepository(pool) {
 
     /** True while a result of this table still has to reach the players service. */
     async hasUnsentResults(id) {
-      const result = await pool
-        .request()
-        .input('id', sql.Char(6), id)
+      const result = await pool.request().input('id', sql.Char(6), id)
         .query(`SELECT CASE WHEN EXISTS (
                   SELECT 1 FROM dbo.hand_players AS r
                   JOIN dbo.hands AS h ON h.id = r.hand_id

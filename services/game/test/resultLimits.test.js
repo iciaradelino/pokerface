@@ -19,18 +19,28 @@ describe('chip limits agree with the players service', () => {
   it('lets no table produce a result the players service would refuse', () => {
     for (let maxSeats = 2; maxSeats <= 6; maxSeats++) {
       const startingStack = Math.floor(MAX_CHIPS_PER_TABLE / maxSeats);
-      expect(validateCreateTableInput({ playerId: ana, startingStack, maxSeats }).error).toBeUndefined();
+      expect(
+        validateCreateTableInput({ playerId: ana, startingStack, maxSeats }).error,
+      ).toBeUndefined();
       // The biggest possible win: one player takes everyone else's chips.
       const biggestWin = startingStack * (maxSeats - 1);
-      expect(validateResultInput({ handId: '11111111-1111-4111-8111-111111111111', delta: biggestWin }).error)
-        .toBeUndefined();
-      expect(validateResultInput({ handId: '11111111-1111-4111-8111-111111111111', delta: -biggestWin }).error)
-        .toBeUndefined();
+      expect(
+        validateResultInput({ handId: '11111111-1111-4111-8111-111111111111', delta: biggestWin })
+          .error,
+      ).toBeUndefined();
+      expect(
+        validateResultInput({ handId: '11111111-1111-4111-8111-111111111111', delta: -biggestWin })
+          .error,
+      ).toBeUndefined();
     }
   });
 
   it('refuses the settings from the review: three seats of 600,000,000 chips', () => {
-    const { error } = validateCreateTableInput({ playerId: ana, startingStack: 600_000_000, maxSeats: 3 });
+    const { error } = validateCreateTableInput({
+      playerId: ana,
+      startingStack: 600_000_000,
+      maxSeats: 3,
+    });
     expect(error).toContain('limit per table');
   });
 
@@ -66,12 +76,16 @@ describe('a result the players service refuses for good', () => {
     received = [];
     server = http.createServer((req, res) => {
       let body = '';
-      req.on('data', (chunk) => { body += chunk; });
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
       req.on('end', () => {
         const { error, value } = validateResultInput(JSON.parse(body));
         res.writeHead(error ? 400 : 200, { 'Content-Type': 'application/json' });
         if (!error) received.push({ playerId: req.url.split('/')[2], ...value });
-        res.end(JSON.stringify(error ? { message: error, code: 'INVALID_INPUT' } : { chips: 1000 }));
+        res.end(
+          JSON.stringify(error ? { message: error, code: 'INVALID_INPUT' } : { chips: 1000 }),
+        );
       });
     });
     server.listen(0);
@@ -84,14 +98,34 @@ describe('a result the players service refuses for good', () => {
     const tables = fakeTablesRepository();
     const logs = [];
     const players = createPlayersClient({ baseUrl: `http://localhost:${server.address().port}` });
-    const sender = createResultsSender({ tables, players, logger: (l) => logs.push(JSON.parse(l)) });
+    const sender = createResultsSender({
+      tables,
+      players,
+      logger: (l) => logs.push(JSON.parse(l)),
+    });
     const bad = '11111111-1111-4111-8111-111111111111';
     const good = '22222222-2222-4222-8222-222222222222';
     // An old hand saved before the limits matched, then a normal one.
-    tables.hands.push({ tableId: 'K7QX2M', handId: bad, handNumber: 1, stacks: [],
-      deltas: [{ playerId: ana, delta: 1_200_000_000 }, { playerId: ben, delta: -1_200_000_000 }] });
-    tables.hands.push({ tableId: 'K7QX2M', handId: good, handNumber: 2, stacks: [],
-      deltas: [{ playerId: ana, delta: -20 }, { playerId: ben, delta: 20 }] });
+    tables.hands.push({
+      tableId: 'K7QX2M',
+      handId: bad,
+      handNumber: 1,
+      stacks: [],
+      deltas: [
+        { playerId: ana, delta: 1_200_000_000 },
+        { playerId: ben, delta: -1_200_000_000 },
+      ],
+    });
+    tables.hands.push({
+      tableId: 'K7QX2M',
+      handId: good,
+      handNumber: 2,
+      stacks: [],
+      deltas: [
+        { playerId: ana, delta: -20 },
+        { playerId: ben, delta: 20 },
+      ],
+    });
 
     await sender.sendPending();
 
@@ -107,12 +141,20 @@ describe('a result the players service refuses for good', () => {
 
   it('is retried later when the players service is down instead (5xx)', async () => {
     server.removeAllListeners('request');
-    server.on('request', (_req, res) => { res.writeHead(503); res.end(); });
+    server.on('request', (_req, res) => {
+      res.writeHead(503);
+      res.end();
+    });
     const tables = fakeTablesRepository();
     const players = createPlayersClient({ baseUrl: `http://localhost:${server.address().port}` });
     const sender = createResultsSender({ tables, players, logger: () => {} });
-    tables.hands.push({ tableId: 'K7QX2M', handId: '33333333-3333-4333-8333-333333333333', handNumber: 1,
-      stacks: [], deltas: [{ playerId: ana, delta: 5 }] });
+    tables.hands.push({
+      tableId: 'K7QX2M',
+      handId: '33333333-3333-4333-8333-333333333333',
+      handNumber: 1,
+      stacks: [],
+      deltas: [{ playerId: ana, delta: 5 }],
+    });
     await sender.sendPending();
     expect(tables.rejected.size).toBe(0);
     expect(await tables.getUnsentResults(10)).toHaveLength(1);

@@ -15,7 +15,8 @@ describe('/health', () => {
   });
 
   it('reports a database outage without exposing its error and recovers on the next request', async () => {
-    const checkDatabase = vi.fn()
+    const checkDatabase = vi
+      .fn()
       .mockRejectedValueOnce(new Error('private connection details'))
       .mockResolvedValue(undefined);
     const app = createApp({ checkDatabase, uiOrigin, logger: () => {} });

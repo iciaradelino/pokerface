@@ -36,7 +36,9 @@ beforeEach(() => {
     handPauseMs: PAUSE,
     saveRetryMs: RETRY,
     generateHandId: () => handIds.shift(),
-    onChange: () => { changes += 1; },
+    onChange: () => {
+      changes += 1;
+    },
     logger: () => {},
   });
 });
@@ -99,7 +101,11 @@ describe('when a hand ends', () => {
     expect(status).toBe('left');
     expect(tables.hands).toHaveLength(1);
     const [hand] = tables.hands;
-    expect(hand).toMatchObject({ tableId: 'K7QX2M', handId: '11111111-1111-4111-8111-111111111111', handNumber: 1 });
+    expect(hand).toMatchObject({
+      tableId: 'K7QX2M',
+      handId: '11111111-1111-4111-8111-111111111111',
+      handNumber: 1,
+    });
     expect(hand.deltas.reduce((sum, d) => sum + d.delta, 0)).toBe(0);
     expect(hand.deltas.map((d) => d.playerId).sort()).toEqual([ana, ben]);
     expect(hand.result.winners[0].playerId).toBe(ana);
@@ -135,7 +141,8 @@ describe('when a hand ends', () => {
     await live.leave('K7QX2M', ben); // The hand ends and is saved, but players has not got it yet.
     expect((await live.remove('K7QX2M')).status).toBe('results_pending');
     expect(tables.hands).toHaveLength(1); // Nothing was deleted.
-    for (const r of await tables.getUnsentResults(10)) await tables.markResultSent(r.handId, r.playerId);
+    for (const r of await tables.getUnsentResults(10))
+      await tables.markResultSent(r.handId, r.playerId);
     expect((await live.remove('K7QX2M')).status).toBe('deleted');
     expect(tables.rows.has('K7QX2M')).toBe(false);
     expect((await live.remove('K7QX2M')).status).toBe('not_found');
@@ -217,7 +224,10 @@ describe('restoring after a restart', () => {
   it('rebuilds an engine table that the engine accepts', () => {
     const game = restoreEngineTable(
       {
-        smallBlind: 5, bigBlind: 10, startingStack: 1000, maxSeats: 3,
+        smallBlind: 5,
+        bigBlind: 10,
+        startingStack: 1000,
+        maxSeats: 3,
         seats: [{ seatIndex: 2, playerId: ben, name: 'Ben', stack: 40 }],
       },
       3,
@@ -236,7 +246,9 @@ describe('joining', () => {
     await newTable({ maxSeats: 2 });
     expect((await live.join('K7QX2M', { playerId: ben, playerName: 'Ben' })).status).toBe('joined');
     expect((await live.join('K7QX2M', { playerId: cleo, playerName: 'Cleo' })).status).toBe('full');
-    expect((await live.join('ZZZZZZ', { playerId: cleo, playerName: 'Cleo' })).status).toBe('not_found');
+    expect((await live.join('ZZZZZZ', { playerId: cleo, playerName: 'Cleo' })).status).toBe(
+      'not_found',
+    );
   });
 
   it('runs operations on one table in order, even when they arrive together', async () => {

@@ -12,13 +12,20 @@ export class PlayersUnavailableError extends Error {
   }
 }
 
-export function createPlayersClient({ baseUrl, timeoutMs = PLAYERS_TIMEOUT_MS, fetchImpl = fetch }) {
+export function createPlayersClient({
+  baseUrl,
+  timeoutMs = PLAYERS_TIMEOUT_MS,
+  fetchImpl = fetch,
+}) {
   if (!baseUrl) throw new Error('PLAYERS_URL is required');
   const base = baseUrl.replace(/\/+$/, '');
 
   async function call(path, options = {}) {
     try {
-      return await fetchImpl(`${base}${path}`, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+      return await fetchImpl(`${base}${path}`, {
+        ...options,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
     } catch (error) {
       throw new PlayersUnavailableError(error?.name === 'TimeoutError' ? 'timeout' : 'unreachable');
     }
