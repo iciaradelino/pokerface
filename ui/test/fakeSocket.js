@@ -6,10 +6,13 @@ import { act } from '@testing-library/react';
  */
 export class FakeSocket {
   static all = [];
+  static OPEN = 1;
 
   constructor(url) {
     this.url = url;
     this.closed = false;
+    this.readyState = 0;
+    this.sent = []; // what the page sent, parsed
     FakeSocket.all.push(this);
   }
 
@@ -22,10 +25,17 @@ export class FakeSocket {
   }
 
   open() {
+    this.readyState = FakeSocket.OPEN;
     act(() => this.onopen?.());
   }
 
-  send(message) {
+  /** The page sends a message (the real WebSocket method). */
+  send(text) {
+    this.sent.push(JSON.parse(text));
+  }
+
+  /** The game service sends the page a message. */
+  push(message) {
     act(() => this.onmessage?.({ data: JSON.stringify(message) }));
   }
 

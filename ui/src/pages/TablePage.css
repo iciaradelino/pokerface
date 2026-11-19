@@ -132,6 +132,16 @@
   box-shadow: var(--shadow-panel);
 }
 
+/* The picture fills the tile; its notice goes on top so it does not cover the name strip. */
+.seat__tile .video-tile {
+  position: absolute;
+  inset: 0;
+}
+
+.seat__tile .video-tile__notice {
+  inset: 0 0 auto 0;
+}
+
 .seat--me {
   width: 170px;
 }

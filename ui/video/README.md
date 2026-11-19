@@ -18,7 +18,7 @@ strict NATs may not connect; their tile shows "Video unavailable" and the game s
 const { camera, local, remotes, retry, hasMic, micOn, toggleMic } = useVideo({
   playerId,
   peerIds: state.seats.map((seat) => seat.playerId),
-  send, // (toPlayerId, data) => sends { type: "signal", from, to, data } on the table socket
+  send, // (toPlayerId, data) => sends { type: "signal", to, data } on the table socket (the server adds `from`)
   onSignal, // (listener) => unsubscribe; listener(from, data) for each incoming "signal"
 });
 
