@@ -8,6 +8,7 @@ import { formatChips } from '../components/Chips.jsx';
 import { TopBar } from '../components/TopBar.jsx';
 import { isCompleteCode, normalizeCode } from '../tableCode.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
+import { tutorialDone } from '../../gestures/GestureTutorial.jsx';
 import './WaitingRoomPage.css';
 
 // How often the seats are refreshed, and how players who are not the host find out that the
@@ -221,6 +222,21 @@ function Room({ code, table, playerId, player, stale, onStart }) {
                 <dd>{isHost ? `${host?.name ?? 'You'} (you)` : hostName}</dd>
               </div>
             </dl>
+          </section>
+
+          <section className="panel waiting__tutorial" aria-labelledby="waiting-tutorial">
+            <h2 id="waiting-tutorial">Gestures</h2>
+            <p className="text-small muted">
+              {tutorialDone()
+                ? 'Want a refresher before the game?'
+                : 'New to gestures? Try each one with your camera before the game starts.'}
+            </p>
+            <Link
+              className="btn btn--outline"
+              to={`/tutorial?next=${encodeURIComponent(`/tables/${code}`)}`}
+            >
+              Practise gestures
+            </Link>
           </section>
 
           {isHost ? (

@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { GESTURE_CAMERA, useGestures } from '../gestures/useGestures.js';
 import { GesturePanel, GestureRing, gestureMessage } from '../gestures/GesturePanel.jsx';
@@ -16,7 +24,9 @@ vi.mock('../gestures/recognizer.js', () => ({
   createFrameReader: () => ({ recognize: () => fake.hands }),
 }));
 
-// The table also opens the camera for video; these tests count the gesture camera's calls.
+// The table also opens the camera for video. By default the video has no camera, so gestures
+// open their own; set video.value to give the table a video camera to share.
+const video = vi.hoisted(() => ({ value: {} }));
 vi.mock('../video/useVideo.js', async (importOriginal) => ({
   ...(await importOriginal()),
   useVideo: () => ({
@@ -27,6 +37,7 @@ vi.mock('../video/useVideo.js', async (importOriginal) => ({
     hasMic: false,
     micOn: true,
     toggleMic: () => {},
+    ...video.value,
   }),
 }));
 
@@ -53,6 +64,7 @@ function stubCamera(getUserMedia = vi.fn(async () => fakeStream('camera'))) {
 beforeEach(() => {
   clock = 0;
   queued = [];
+  video.value = {};
   fake.hands = [];
   fake.load = vi.fn(async () => ({}));
   vi.stubGlobal('requestAnimationFrame', (callback) => queued.push(callback));
@@ -143,6 +155,23 @@ describe('useGestures', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     unmount();
     expect(stream.getTracks()[0].stopped).toBe(false);
+  });
+
+  it('waits for a camera that is still being asked for, then reads it without opening its own', async () => {
+    const getUserMedia = stubCamera();
+    const { result, rerender, unmount } = setup({ cameraPending: true });
+    expect(result.current.status).toBe('starting');
+    await act(async () => {});
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(fake.load).not.toHaveBeenCalled();
+
+    const shared = fakeStream('video');
+    rerender({ cameraPending: false, stream: shared });
+    await waitFor(() => expect(result.current.status).toBe('on'));
+    expect(result.current.stream).toBe(shared);
+    expect(getUserMedia).not.toHaveBeenCalled();
+    unmount();
+    expect(shared.getTracks()[0].stopped).toBe(false); // the video still needs it
   });
 
   it('closes the camera if gestures were turned off before it was allowed', async () => {
@@ -397,6 +426,42 @@ describe('gestures at the table', () => {
     fake.hands = [hand('Thumb_Down')];
     runFrames(1100);
     expect(await screen.findByRole('alert')).toHaveTextContent('Not your turn');
+  });
+
+  it('shares the video camera and draws the ring on my own tile', async () => {
+    const getUserMedia = stubCamera();
+    const shared = fakeStream('video');
+    video.value = { camera: 'on', local: shared };
+    const fetch = mockServices();
+    await renderLive();
+    await screen.findByText('Show a gesture.');
+    expect(getUserMedia).not.toHaveBeenCalled(); // one camera for the whole table
+    expect(screen.getAllByLabelText('Your camera')).toHaveLength(1); // my tile, no second preview
+
+    const mySeat = screen.getByLabelText(/^You, /);
+    fake.hands = [hand('Open_Palm', { y: 0.525 })];
+    runFrames(200);
+    expect(within(mySeat).getByText('Raise 500')).toBeInTheDocument();
+
+    fake.hands = [hand('Thumb_Up')];
+    runFrames(550);
+    expect(within(mySeat).getByRole('progressbar', { name: 'Holding Call' })).toBeInTheDocument();
+    runFrames(600);
+    await waitFor(() => expect(actionBodies(fetch)).toEqual([{ playerId: ME, action: 'call' }]));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off gestures' }));
+    expect(within(mySeat).queryByRole('progressbar')).toBeNull();
+    expect(shared.getTracks()[0].stopped).toBe(false); // the others still see me
+  });
+
+  it('waits for the video to get the camera instead of asking twice', async () => {
+    const getUserMedia = stubCamera();
+    video.value = { camera: 'asking', local: null };
+    mockServices();
+    await renderLive();
+    expect(await screen.findByText('Starting the camera…')).toBeInTheDocument();
+    await act(async () => {});
+    expect(getUserMedia).not.toHaveBeenCalled();
   });
 
   it('keeps the camera off when the profile turned gestures off, until switched on', async () => {

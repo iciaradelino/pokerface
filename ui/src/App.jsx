@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router';
+import { GestureTutorial } from '../gestures/GestureTutorial.jsx';
 import { CreatePlayerPage } from './pages/CreatePlayerPage.jsx';
 import { LobbyPage } from './pages/LobbyPage.jsx';
 import { NotFoundPage } from './pages/NotFoundPage.jsx';
@@ -40,6 +41,14 @@ export function App() {
         element={
           <RequirePlayer>
             <TablePage />
+          </RequirePlayer>
+        }
+      />
+      <Route
+        path="/tutorial"
+        element={
+          <RequirePlayer>
+            <GestureTutorial />
           </RequirePlayer>
         }
       />
