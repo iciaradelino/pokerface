@@ -59,19 +59,22 @@
   transform: scaleX(-1);
 }
 
-.gesture-preview__ring {
+/* Laid over my camera: in the preview here, or on my own seat tile at the table. */
+.gesture-hold {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: grid;
   place-items: center;
   background: rgba(8, 8, 14, 0.35);
+  pointer-events: none;
 }
 
-.gesture-preview__ring > * {
+.gesture-hold > * {
   grid-area: 1 / 1;
 }
 
-.gesture-preview__label {
+.gesture-hold__label {
   color: var(--color-on-dark);
   font-weight: 800;
   font-size: var(--text-small);

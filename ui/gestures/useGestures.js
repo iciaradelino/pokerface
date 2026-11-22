@@ -24,7 +24,10 @@ const STARTING = {
  * Gesture control for one screen (plan.md §6: onProgress, onRaiseAmount, onFire).
  *   enabled        false keeps the camera off
  *   stream         a camera MediaStream to reuse (e.g. the video tiles'); without one, the hook
- *                  opens the camera itself and closes it again when done
+ *                  opens the camera itself and closes it again when done. A stream it is given is
+ *                  never stopped: its owner turns it off
+ *   cameraPending  true while the owner of `stream` is still asking for the camera: the hook
+ *                  waits ("starting") instead of opening a second camera of its own
  *   turn           what may be done now, from turnFrom() in detector.js; null when it is not my
  *                  turn, so nothing fires
  *   onFire         (action, amount?) when a gesture is confirmed
@@ -36,7 +39,15 @@ const STARTING = {
  *   problem  with "error": "denied" (camera blocked), "unavailable" (no camera) or "model"
  *            (gesture recognition could not load). The buttons still work in every case.
  */
-export function useGestures({ enabled, stream = null, turn, onFire, onProgress, onRaiseAmount }) {
+export function useGestures({
+  enabled,
+  stream = null,
+  cameraPending = false,
+  turn,
+  onFire,
+  onProgress,
+  onRaiseAmount,
+}) {
   const [view, setView] = useState(STARTING);
   const [attempt, setAttempt] = useState(0);
   const turnRef = useRef(turn);
@@ -48,7 +59,7 @@ export function useGestures({ enabled, stream = null, turn, onFire, onProgress, 
   });
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled || cameraPending) return undefined;
     let stopped = false;
     let frame = null;
     let ownStream = null;
@@ -133,7 +144,7 @@ export function useGestures({ enabled, stream = null, turn, onFire, onProgress, 
       video.srcObject = null;
       setView(STARTING);
     };
-  }, [enabled, stream, attempt]);
+  }, [enabled, stream, cameraPending, attempt]);
 
   const retry = () => setAttempt((n) => n + 1);
   if (!enabled) return { ...STARTING, status: 'off', retry };

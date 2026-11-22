@@ -13,7 +13,7 @@ import { STAGE_LABELS, arrangeSeats, potTotal, seatNote } from '../table/tableVi
 import { useTableSocket } from '../table/useTableSocket.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import { turnFrom } from '../../gestures/detector.js';
-import { GesturePanel } from '../../gestures/GesturePanel.jsx';
+import { GestureHold, GesturePanel } from '../../gestures/GesturePanel.jsx';
 import { useGestures } from '../../gestures/useGestures.js';
 import { VideoTile } from '../../video/VideoTile.jsx';
 import { useVideo } from '../../video/useVideo.js';
@@ -113,8 +113,13 @@ export function TablePage() {
     }
   }
 
+  // One camera for the table: gestures read the video's picture instead of opening a second
+  // camera, and wait while the video is still asking for it. Only without a video camera
+  // (blocked or missing) do gestures try one of their own.
   const gestures = useGestures({
     enabled: gesturesEnabled,
+    stream: video.local,
+    cameraPending: video.camera === 'asking',
     turn: gestureSend.busy ? null : turnFrom({ myTurn, mine, bigBlind: table?.bigBlind }),
     onFire: sendGesture,
   });
@@ -219,6 +224,7 @@ export function TablePage() {
                       : ''
                   }
                   video={video}
+                  gestures={seat?.playerId === playerId && video.local ? gestures : null}
                   holeCards={
                     seat?.playerId === playerId
                       ? mine?.holeCards
@@ -231,6 +237,7 @@ export function TablePage() {
 
         <GesturePanel
           gestures={gestures}
+          showPreview={!video.local}
           myTurn={myTurn}
           onToggle={() => setGesturesChoice(!gesturesEnabled)}
           error={gestureSend.turnKey === turnKey ? gestureSend.error : null}
@@ -252,7 +259,18 @@ export function TablePage() {
   );
 }
 
-function SeatSpot({ position, seat, code, isMe, colour, isDealer, note, holeCards, video }) {
+function SeatSpot({
+  position,
+  seat,
+  code,
+  isMe,
+  colour,
+  isDealer,
+  note,
+  holeCards,
+  video,
+  gestures,
+}) {
   const [x, y] = position;
   // Bets sit between the seat and the middle of the table.
   const betStyle = { left: `${x + (50 - x) * 0.42}%`, top: `${y + (50 - y) * 0.45}%` };
@@ -302,6 +320,7 @@ function SeatSpot({ position, seat, code, isMe, colour, isDealer, note, holeCard
               <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
             </svg>
           </VideoTile>
+          {gestures?.status === 'on' && <GestureHold gestures={gestures} size={72} />}
           <span className="seat__strip">
             <span className="seat__name">{isMe ? 'You' : seat.name}</span>
             <span className="tabular">{formatChips(seat.stack)}</span>
