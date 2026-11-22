@@ -147,15 +147,40 @@ describe('gesture tutorial', () => {
     await screen.findByText('Show a gesture.');
   });
 
-  it('only goes back to pages of this app', () => {
+  it('only goes back to a waiting room, or else the lobby', () => {
     expect(nextPath('/tables/K7QX2M')).toBe('/tables/K7QX2M');
-    expect(nextPath('https://example.com')).toBe('/lobby');
-    expect(nextPath('//example.com')).toBe('/lobby');
-    expect(nextPath('/\\example.com')).toBe('/lobby'); // browsers read "\" as "/"
-    expect(nextPath('/\t/example.com')).toBe('/lobby'); // and drop tabs and newlines
-    expect(nextPath('/\n/example.com')).toBe('/lobby');
-    expect(nextPath('/tables/K7QX2M?x=1#top')).toBe('/tables/K7QX2M?x=1#top');
+    expect(nextPath('/tables/k7qx2m')).toBe('/tables/K7QX2M');
+    // Every way of writing another site that browsers or React Router would follow.
+    for (const value of [
+      'https://example.com',
+      '//example.com',
+      '/\\example.com',
+      '/\t/example.com',
+      '/\n/example.com',
+      '/..//example.com',
+      '/.//example.com',
+      '/%2F%2Fexample.com',
+      '/%5Cexample.com',
+      'javascript:alert(1)',
+      '/tables/K7QX2M//example.com',
+      '/tables/../..//example.com',
+      '/tables/K7QX2M?next=//example.com',
+      '/tables/K7QX2M#//example.com',
+      ' /tables/K7QX2M',
+    ]) {
+      expect(nextPath(value), value).toBe('/lobby');
+    }
+    // Other pages of the app are not needed here either.
+    expect(nextPath('/tables/K7QX2M/play')).toBe('/lobby');
+    expect(nextPath('/lobby')).toBe('/lobby');
     expect(nextPath(null)).toBe('/lobby');
+  });
+
+  it('never gives React Router a link to another site', () => {
+    const external = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i; // how React Router spots one
+    for (const value of ['/..//example.com', '/.//example.com', '/\\/example.com', '///x']) {
+      expect(nextPath(value)).not.toMatch(external);
+    }
   });
 
   it('does not leave the app from a crafted Skip link', async () => {
@@ -164,6 +189,14 @@ describe('gesture tutorial', () => {
       'href',
       '/lobby',
     );
+  });
+
+  it('does not leave the app from a Skip link with dots in it', async () => {
+    await renderTutorial('/tutorial?next=%2F..%2F%2Fexample.com');
+    const skip = screen.getByRole('link', { name: 'Skip the tutorial' });
+    expect(skip).toHaveAttribute('href', '/lobby');
+    fireEvent.click(skip);
+    expect(screen.getByText('Lobby')).toBeInTheDocument();
   });
 });
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { formatChips } from '../src/components/Chips.jsx';
 import { TopBar } from '../src/components/TopBar.jsx';
+import { normalizeCode } from '../src/tableCode.js';
 import { usePlayer } from '../src/usePlayer.js';
 import { ACTION_LABELS, GESTURE_GUIDE, GesturePreview, gestureMessage } from './GesturePanel.jsx';
 import { useGestures } from './useGestures.js';
@@ -35,19 +36,14 @@ function markTutorialDone() {
 }
 
 /**
- * Where to go after the tutorial: only a page of this app, else the lobby. The value is read the
- * way the browser reads a link (so "/\evil.com" or a tab inside "//" count as another site), and
- * kept only if it stays on this origin.
+ * Where to go after the tutorial. `next` comes from the address, so anyone can write it: it is
+ * only ever a waiting room ("/tables/<code>") or the lobby. Anything else, including every way of
+ * writing another site ("//", "\", "..", tabs, encoded characters), goes to the lobby. The path is
+ * rebuilt from the table code instead of reusing what was passed in.
  */
 export function nextPath(value) {
-  if (typeof value !== 'string' || !value.startsWith('/')) return '/lobby';
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.origin !== window.location.origin) return '/lobby';
-    return `${url.pathname}${url.search}${url.hash}`;
-  } catch {
-    return '/lobby';
-  }
+  const match = /^\/tables\/([A-Za-z0-9]{6})$/.exec(typeof value === 'string' ? value : '');
+  return match ? `/tables/${normalizeCode(match[1])}` : '/lobby';
 }
 
 const describe = (action, amount) =>
