@@ -107,6 +107,46 @@ The game service runs private tables of 2 to 6 players with Olivia's engine. Eve
 - On Azure the UI must use `wss://`, and `UI_ORIGIN` must match the UI's address or the origin check refuses the socket.
 - When the database is down, a finished hand waits in memory until it can be saved; if the container stops during that time, that hand is lost too.
 
+
+## Partial failure: delivering hand results to the players service
+
+**Status:** accepted, 19 November 2026. **Owner:** Lara. The `hand_players` table and its rules are in [data-model.md](data-model.md).
+
+### Context
+
+When a hand ends, the game service knows how many chips each player won or lost, but the chip balances belong to the players service and its own database. There is no transaction across the two databases, and the players service can be down, slow or restarting at any moment. A player's chips must never be lost or counted twice, and an outage of the players service must not stop the tables. The players service ignores a `handId` it has already saved for a player, and it refuses a `delta` above 1,000,000,000.
+
+### Decision
+
+- **Results are stored before they are sent.** Each finished hand writes one `hand_players` row per player, with `sent_at` empty, in the same transaction as the hand and the new stacks. The game service then sends the rows with `POST /players/:id/results { handId, delta }`. This is the transactional outbox pattern: a saved hand always has its results waiting to be delivered.
+- **Sending is retried until it succeeds.** A sender runs after every saved hand, once a minute and at startup. It sends the oldest results first, in batches of 50, with a 2-second timeout per call, and only one round runs at a time.
+- **Each answer has a fixed meaning:**
+  - 200: delivered, `sent_at` is set.
+  - 404: the player deleted their profile, so the row is marked as sent and never retried.
+  - Any other 4xx: the players service refused the result for good. The row gets `rejected_at`, is logged as `result_rejected` and is skipped, so it cannot block the results behind it.
+  - Timeout, network error or 5xx: the players service is unavailable. The row stays pending and the round stops, so a service that is down is not flooded. The next round tries again.
+- **A retry never counts twice.** The `handId` is the `hands.id` UUID, and the players service ignores a `handId` it already has for that player.
+- **The tables keep playing.** Creating or joining a table checks the player with `GET /players/:id` and answers `503 PLAYERS_UNAVAILABLE` if that fails, but the player's name is copied into the seat, so the players at a table can go on playing. Their results queue up and arrive when the players service is back.
+- **A table with undelivered results cannot be deleted.** Deleting a table also deletes its hands and their `hand_players` rows, so `DELETE /tables/:id` answers `409 RESULTS_PENDING` until every result is sent or rejected.
+- **One chip limit per table.** A table never holds more than 1,000,000,000 chips in total (`starting_stack × max_seats` on creation, and the sum of stacks when someone joins), which is the players service's limit on `delta`. Nobody can win more than everyone else at the table has, so no valid hand can produce a result the players service refuses.
+
+### Alternatives considered
+
+- **Call the players service when the hand ends and fail if it is down.** Simpler, but an outage of the players service would stop every table, or the hand would have to be rolled back.
+- **Send once and forget.** Results sent during an outage would be lost, and so would the chips.
+- **A message queue such as Azure Service Bus.** The standard tool for this, but another resource to deploy, secure and pay for, while the outbox only needs one table in the database we already have.
+- **The players service pulls results from the game service.** It would have to read the game service's data and know when to ask, coupling the services in the other direction.
+- **Retry every failure, including 4xx.** This was our first version. A reviewer showed that one refused result blocked every result behind it, so a refusal is now marked as rejected.
+- **Keep the results when a table is deleted** (no cascade, or copying them to another table). It avoids the 409, but needs more schema and a second place to send results from. Results are usually delivered within seconds, so blocking the delete for a short time is simpler.
+
+### Consequences
+
+- Delivery is at least once and eventually consistent: during an outage a profile shows its old chips, and it catches up within a minute of the players service coming back. Safe retries make "at least once" count as exactly once.
+- A rejected result is kept but nobody is notified automatically; someone has to look for the `result_rejected` warning in the logs. With the chip limit, it should only happen if the two services' rules drift apart.
+- The limit of 1,000,000,000 is written in both services. `resultLimits.test.js` imports the players service's own validation, so the tests fail if one service changes it and the other does not.
+- The creator may have to wait up to a minute to delete a table after an outage.
+- The tests cover each answer of the players service with a fake client, and one test sends results to an HTTP server that uses the players service's real validation.
+
 ---
 
 ## Azure deployment and pipeline
