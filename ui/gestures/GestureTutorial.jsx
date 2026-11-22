@@ -34,11 +34,20 @@ function markTutorialDone() {
   }
 }
 
-/** Where to go after the tutorial: only a path in this app (no other sites), else the lobby. */
+/**
+ * Where to go after the tutorial: only a page of this app, else the lobby. The value is read the
+ * way the browser reads a link (so "/\evil.com" or a tab inside "//" count as another site), and
+ * kept only if it stays on this origin.
+ */
 export function nextPath(value) {
-  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
-    ? value
-    : '/lobby';
+  if (typeof value !== 'string' || !value.startsWith('/')) return '/lobby';
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin) return '/lobby';
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return '/lobby';
+  }
 }
 
 const describe = (action, amount) =>

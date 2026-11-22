@@ -151,7 +151,19 @@ describe('gesture tutorial', () => {
     expect(nextPath('/tables/K7QX2M')).toBe('/tables/K7QX2M');
     expect(nextPath('https://example.com')).toBe('/lobby');
     expect(nextPath('//example.com')).toBe('/lobby');
+    expect(nextPath('/\\example.com')).toBe('/lobby'); // browsers read "\" as "/"
+    expect(nextPath('/\t/example.com')).toBe('/lobby'); // and drop tabs and newlines
+    expect(nextPath('/\n/example.com')).toBe('/lobby');
+    expect(nextPath('/tables/K7QX2M?x=1#top')).toBe('/tables/K7QX2M?x=1#top');
     expect(nextPath(null)).toBe('/lobby');
+  });
+
+  it('does not leave the app from a crafted Skip link', async () => {
+    await renderTutorial('/tutorial?next=%2F%5Cexample.com');
+    expect(screen.getByRole('link', { name: 'Skip the tutorial' })).toHaveAttribute(
+      'href',
+      '/lobby',
+    );
   });
 });
 
