@@ -33,8 +33,7 @@ Merged and accepted by the Sprint 1 Product Owner, but not Done until the pipeli
 ## Progress during the sprint
 
 - **20 November:** IE announced how to access the group subscription. Members accept the invitation to IE's Azure directory and check `rg-sdd-3a-g5`. The pipeline's managed identity `sdd-3a-g5-github` is still being created by IE, so [#2](https://github.com/iciaradelino/pokerface/issues/2) cannot run yet.
-- **22 November:** merged the partial failure decision record ([#55](https://github.com/iciaradelino/pokerface/pull/55)) and the webcams at the table ([#61](https://github.com/iciaradelino/pokerface/pull/61)). The shared camera and the gesture tutorial ([#62](https://github.com/iciaradelino/pokerface/pull/62)) are in review.
-
+- **22 November:** merged the partial failure decision record ([#55](https://github.com/iciaradelino/pokerface/pull/55)), the webcams at the table ([#61](https://github.com/iciaradelino/pokerface/pull/61)), and the shared camera and gesture tutorial ([#62](https://github.com/iciaradelino/pokerface/pull/62), closes [#13](https://github.com/iciaradelino/pokerface/issues/13)). Reviewing #62 found two ways the tutorial's Skip link could send players to another site; both were fixed before merging.
 ## Done
 
 _To fill in at the end of the sprint: each story that meets the [Definition of Done](definition-of-done.md), with its deployment run._
