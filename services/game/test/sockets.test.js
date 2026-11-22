@@ -296,7 +296,6 @@ describe('hidden cards', () => {
   });
 });
 
-
 describe('video signalling', () => {
   async function seatedPair() {
     await join(ben);
