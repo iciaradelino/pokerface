@@ -20,10 +20,13 @@ export const FINAL_CLOSE_CODES = new Set([4400, 4403, 4404]);
  * If the socket drops it reconnects after 1, 2, 4 then every 8 seconds; the server sends the
  * full state again on connect, so nothing is lost. It stops for good on a FINAL_CLOSE_CODES
  * close.
- * Also for video (ui/video/): `send(to, data)` sends a "signal" to another player at the table
- * (kept and sent once the socket opens, if it is not open yet) and `onSignal(listener)` calls listener(from, data) for
- * each signal that arrives and returns an unsubscribe function. Both keep the same identity
- * for the whole visit, as useVideo needs.
+ * Also for video (ui/video/):
+ *   send(to, data)     sends a "signal" to another player at the table. While the socket is not
+ *                      open it is kept and sent on open; the queue is emptied when the socket
+ *                      closes for good or the hook stops.
+ *   onSignal(listener) calls listener(from, data) for each signal that arrives and returns an
+ *                      unsubscribe function.
+ * Both keep the same identity for the whole visit, as useVideo needs.
  */
 export function useTableSocket(code, playerId) {
   const [state, setState] = useState(null);
@@ -33,14 +36,16 @@ export function useTableSocket(code, playerId) {
   const socketRef = useRef(null);
   const listenersRef = useRef(new Set());
 
-  const pendingRef = useRef([]); // signals made before the socket opened
+  const pendingRef = useRef([]); // signals made while the socket was not open
 
   const send = useCallback((to, data) => {
     const text = JSON.stringify({ type: 'signal', to, data });
     const socket = socketRef.current;
     if (socket?.readyState === WebSocket.OPEN) socket.send(text);
     // The seats arrive over HTTP before the socket opens, so the first offers are made too
-    // early. Keep them (a few) and send them on open instead of losing the call.
+    // early. Keep them (a few) and send them on open instead of losing the call. Also kept while
+    // reconnecting: a late offer is better than none, because a lost one would leave that
+    // connection waiting for an answer for good (the other side's mesh handles late offers).
     else if (pendingRef.current.length < MAX_PENDING_SIGNALS) pendingRef.current.push(text);
   }, []);
 
@@ -79,6 +84,7 @@ export function useTableSocket(code, playerId) {
       socket.onclose = (event) => {
         if (closed) return;
         if (FINAL_CLOSE_CODES.has(event?.code)) {
+          pendingRef.current = []; // nobody will ever read them
           setCloseCode(event.code);
           setConnection('closed');
           return;
@@ -95,6 +101,7 @@ export function useTableSocket(code, playerId) {
       clearTimeout(retryTimer);
       socket?.close();
       socketRef.current = null;
+      pendingRef.current = []; // they belonged to the table I am leaving
     };
   }, [code, playerId]);
 

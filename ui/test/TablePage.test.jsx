@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { TablePage } from '../src/pages/TablePage.jsx';
+import { useTableSocket } from '../src/table/useTableSocket.js';
 import { clearPlayerId, savePlayerId } from '../src/player.js';
 import {
   arrangeSeats,
@@ -414,6 +423,41 @@ describe('TablePage video', () => {
     await screen.findByLabelText('Your camera');
     cleanup();
     expect(stream.getTracks().every((track) => track.stopped)).toBe(true);
+  });
+});
+
+describe('useTableSocket signals', () => {
+  const hook = (code = 'K7QX2M') =>
+    renderHook(({ table }) => useTableSocket(table, ME), { initialProps: { table: code } });
+
+  it('sends the signals made before the socket opened, once it opens', () => {
+    const { result } = hook();
+    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
+    const socket = FakeSocket.latest;
+    expect(socket.sent).toEqual([]);
+    socket.open();
+    expect(socket.sent).toEqual([
+      { type: 'signal', to: SOFIA, data: { candidate: { candidate: 'c' } } },
+    ]);
+  });
+
+  it('forgets the queued signals when the socket closes for good', () => {
+    const { result } = hook();
+    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
+    FakeSocket.latest.drop(4404);
+    expect(result.current.connection).toBe('closed');
+    // Whatever opens next (here a fake socket of the same hook) gets none of them.
+    FakeSocket.latest.open();
+    expect(FakeSocket.latest.sent).toEqual([]);
+  });
+
+  it('does not carry queued signals over to another table', () => {
+    const { result, rerender } = hook('K7QX2M');
+    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
+    rerender({ table: 'ABC234' });
+    FakeSocket.latest.open();
+    expect(FakeSocket.latest.url).toContain('/tables/ABC234/');
+    expect(FakeSocket.latest.sent).toEqual([]);
   });
 });
 
