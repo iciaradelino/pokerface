@@ -1,6 +1,6 @@
 # Sprint 1
 
-**Dates:** 11–18 November 2026. **Status:** the sprint has ended. The Review and the Retrospective are in class (S30).
+**Dates:** 11–18 November 2026. **Status:** finished.
 **Product Owner:** Ali. **Scrum Master:** Laura. **Developers:** everyone (Ali, Olivia, Lara, Laura, Iciar, Matteo).
 
 ## Sprint goal
@@ -13,7 +13,7 @@ The team selected the work below for the sprint, in this order, and kept the spr
 
 ### Selected work
 
-Taken from the Sprint 1 list in [plan.md](../../plan.md).
+Taken from the Sprint 1 list in [plan.md](../plan.md).
 
 | Order | Story | Owner |
 |---|---|---|
@@ -35,7 +35,7 @@ Left for Sprint 2: gestures ([#12](https://github.com/iciaradelino/pokerface/iss
 
 ## Done
 
-Nothing is Done yet under our [Definition of Done](definition-of-done.md). Every story below is merged into `main` with tests, but none is deployed, because we could not deploy to Azure. The teacher gave us access to Azure through an invitation to the university's Azure directory (sent by Microsoft on behalf of IE), but we have not received it. Without accepting it we cannot see our resource group `rg-sdd-3a-g5`, so we cannot test the deployment workflow and the Bicep files or run the `/health` check after a merge. The pipeline will sign in as the managed identity `sdd-3a-g5-github`, which the teacher is creating for us. The Product Owner has accepted them, so deployment is the only thing missing. The status at the end of the sprint:
+Only CI ([#49](https://github.com/iciaradelino/pokerface/pull/49)) is Done: it runs on every pull request, and the Product Owner accepted it at the Review. No application story is Done yet under our [Definition of Done](definition-of-done.md). Every story below is merged into `main` with tests, but none is deployed, because we could not deploy to Azure. The teacher gave us access to Azure through an invitation to the university's Azure directory (sent by Microsoft on behalf of IE), but we have not received it. Without accepting it we cannot see our resource group `rg-sdd-3a-g5`, so we cannot test the deployment workflow and the Bicep files or run the `/health` check after a merge. The pipeline will sign in as the managed identity `sdd-3a-g5-github`, which the teacher is creating for us. The Product Owner has accepted them, so deployment is the only thing missing. The status at the end of the sprint:
 
 | Story | In `main` | Still missing for Done |
 |---|---|---|
@@ -60,14 +60,27 @@ Left for Sprint 2 as planned: gestures, the leaderboard, webcams and monitoring.
 
 ## Review
 
-_To fill in after the Sprint 1 Review in class (session S30): what we demonstrated and what the Product Owner accepted._
+We held the Review on 18 November in the team chat. We showed that a player can create a profile, create a table, join it by code from a second browser and play a full hand with buttons, with the chip results saved to the players service, all running locally with Compose. We also showed CI running on every PR. The Product Owner accepted CI as Done. The Product Owner accepted the other stories as working locally, but they are not Done because nothing is deployed to Azure yet. We met the feature part of the sprint goal locally, but not the deployment part. All Not done stories move to Sprint 2, with the Azure deployment first.
 
 ## Retrospective
 
-_To fill in after the Retrospective in class (session S30), with the whole team: what went well, what to improve and one agreement for Sprint 2._
+**Went well**
 
-**Agreement for Sprint 2:** _to be added._
+- A full hand works end to end locally: profile, table, a hand with buttons and saved results.
+- CI now builds and starts the full stack with SQL Server and checks both services and the UI.
+- Every change reached `main` through a reviewed pull request.
+
+**To improve**
+
+- We missed our Sprint 0 agreement to deploy Hello World to Azure by 12 November. CI was not ready by then, and GitHub's Azure login is still not confirmed because the managed identity has not been provided yet.
+- We agreed that nothing else would be merged until the pipeline worked, but we kept merging features, so none of them could be deployed and counted as Done.
+- Most PRs were merged in the last two days of the sprint, which left little time for review.
+
+**Agreement for Sprint 2:** review the deployment code while we wait for IE, then make the first successful pipeline deployment our first priority as soon as the identity is ready.
 
 ## Next steps
 
-_To fill in after S30, together with the Sprint 2 Planning._
+- Sprint 2 roles: Lara is Product Owner and Olivia is Scrum Master.
+- Review and merge the deployment PR ([#51](https://github.com/iciaradelino/pokerface/pull/51)), and deploy as soon as IE confirms the managed identity.
+- Move the Not done stories to Sprint 2 in the GitHub Project, with #2 first.
+- Lara brings the Sprint 2 goal and backlog to Planning.
