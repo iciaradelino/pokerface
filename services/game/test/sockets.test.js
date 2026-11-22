@@ -219,6 +219,84 @@ describe('live updates', () => {
   });
 });
 
+describe('hidden cards', () => {
+  // Everything a socket received up to and including the end of hand 1. The next hand starts
+  // 50 ms later with a new deck, and an old hole card may then appear on the new board.
+  function handOne(ws) {
+    const end = ws.messages.findIndex(
+      (m) => m.type === 'state' && m.handNumber === 1 && m.stage === 'complete',
+    );
+    return end === -1 ? ws.messages : ws.messages.slice(0, end + 1);
+  }
+
+  const mentions = (messages, cards) =>
+    cards.some((card) => JSON.stringify(messages).includes(`"${card}"`));
+
+  const act = (playerId, action) =>
+    request(server).post('/tables/K7QX2M/actions').send({ playerId, action });
+
+  // Ana and Ben connected and the first hand dealt; returns each player's hole cards.
+  async function startHeadsUp() {
+    const anaWs = connect(ana);
+    await until(() => last(anaWs, 'private'), 'Ana connected');
+    await join(ben);
+    const benWs = connect(ben);
+    await until(
+      () => last(anaWs, 'state')?.stage === 'preflop' && last(benWs, 'state')?.stage === 'preflop',
+      'the hand to start',
+    );
+    const game = await live.get('K7QX2M');
+    const cards = Object.fromEntries(game.hand.players.map((p) => [p.id, p.holeCards]));
+    return { anaWs, benWs, cards };
+  }
+
+  const bothSaw = (anaWs, benWs) =>
+    handOne(anaWs).at(-1)?.stage === 'complete' && handOne(benWs).at(-1)?.stage === 'complete';
+
+  it("never sends a player the other player's cards when the hand ends with a fold", async () => {
+    const { anaWs, benWs, cards } = await startHeadsUp();
+    const game = await live.get('K7QX2M');
+    const folder = game.hand.players[game.hand.toAct].id;
+    expect((await act(folder, 'fold')).status).toBe(200);
+    await until(() => bothSaw(anaWs, benWs), 'the end of the hand');
+
+    for (const [ws, me, other] of [
+      [anaWs, ana, ben],
+      [benWs, ben, ana],
+    ]) {
+      const received = handOne(ws);
+      expect(received.every((m) => m.type !== 'private' || m.playerId === me)).toBe(true);
+      expect(mentions(received, cards[other])).toBe(false);
+      expect(received.at(-1).result).toMatchObject({ showdown: false, revealed: {} });
+    }
+  });
+
+  it("reveals the other player's cards only in the showdown message", async () => {
+    const { anaWs, benWs, cards } = await startHeadsUp();
+    for (let moves = 0; moves < 20; moves++) {
+      const game = await live.get('K7QX2M');
+      if (game.hand.handNumber !== 1 || game.hand.phase === 'complete') break;
+      const player = game.hand.players[game.hand.toAct].id;
+      const legal = (await live.view('K7QX2M', player)).private.legalActions;
+      expect((await act(player, legal.includes('check') ? 'check' : 'call')).status).toBe(200);
+    }
+    await until(() => bothSaw(anaWs, benWs), 'the showdown');
+
+    for (const [ws, me, other] of [
+      [anaWs, ana, ben],
+      [benWs, ben, ana],
+    ]) {
+      const received = handOne(ws);
+      const showdown = received.at(-1);
+      expect(received.every((m) => m.type !== 'private' || m.playerId === me)).toBe(true);
+      expect(mentions(received.slice(0, -1), cards[other])).toBe(false);
+      expect(showdown.result.showdown).toBe(true);
+      expect(showdown.result.revealed[other]).toEqual(cards[other]);
+    }
+  });
+});
+
+
 describe('video signalling', () => {
   async function seatedPair() {
     await join(ben);
