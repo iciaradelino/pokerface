@@ -237,3 +237,20 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- Link to the gesture tutorial (ui/gestures/GestureTutorial.jsx) ---------- */
+.waiting__tutorial {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.waiting__tutorial h2 {
+  font-size: var(--text-section);
+}
+
+.waiting__tutorial p {
+  margin: 0;
+}

@@ -39,7 +39,7 @@ export function gestureMessage(gestures, { myTurn }) {
 }
 
 /** Progress ring for the gesture being held. */
-export function GestureRing({ action, progress, size = 96 }) {
+export function GestureRing({ action, progress, size = 96, label }) {
   const r = size / 2 - 6;
   const length = 2 * Math.PI * r;
   return (
@@ -49,7 +49,7 @@ export function GestureRing({ action, progress, size = 96 }) {
       height={size}
       viewBox={`0 0 ${size} ${size}`}
       role="progressbar"
-      aria-label={action ? `Holding ${ACTION_LABELS[action]}` : 'No gesture'}
+      aria-label={label ?? (action ? `Holding ${ACTION_LABELS[action]}` : 'No gesture')}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
@@ -68,9 +68,33 @@ export function GestureRing({ action, progress, size = 96 }) {
   );
 }
 
-/** My own camera, mirrored, with the ring on top. */
-function Preview({ stream, action, progress }) {
+/**
+ * The ring and what it is for, to lay over my camera: the gesture being held, or the raise
+ * amount while an open palm picks it. Nothing when no gesture is seen.
+ */
+export function GestureHold({ gestures, size = 96 }) {
+  const { action, progress, raising, raiseAmount } = gestures;
+  if (!action && !raising) return null;
+  const label = raising
+    ? `${ACTION_LABELS.raise} ${formatChips(raiseAmount)}`
+    : ACTION_LABELS[action];
+  return (
+    <div className="gesture-hold">
+      <GestureRing
+        action={action ?? 'raise'}
+        progress={action ? progress : 0}
+        size={size}
+        label={action ? undefined : 'Picking the raise amount'}
+      />
+      <span className="gesture-hold__label tabular">{label}</span>
+    </div>
+  );
+}
+
+/** My own camera, mirrored, with the ring on top (the panel here and the gesture tutorial). */
+export function GesturePreview({ gestures }) {
   const videoRef = useRef(null);
+  const { stream } = gestures;
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -80,12 +104,7 @@ function Preview({ stream, action, progress }) {
   return (
     <div className="gesture-preview">
       <video ref={videoRef} muted playsInline aria-label="Your camera" />
-      {action && (
-        <div className="gesture-preview__ring">
-          <GestureRing action={action} progress={progress} />
-          <span className="gesture-preview__label">{ACTION_LABELS[action]}</span>
-        </div>
-      )}
+      <GestureHold gestures={gestures} />
     </div>
   );
 }
@@ -93,14 +112,14 @@ function Preview({ stream, action, progress }) {
 /**
  * Gesture status for the table: camera preview with the hold ring, what to do next, the
  * gestures cheat sheet and an on/off switch. The buttons below always work as well.
+ * showPreview false leaves out the preview, when my video tile already shows my camera and the
+ * ring (GestureHold) is drawn on it instead.
  */
-export function GesturePanel({ gestures, myTurn, onToggle, error }) {
+export function GesturePanel({ gestures, myTurn, onToggle, error, showPreview = true }) {
   const on = gestures.status !== 'off';
   return (
     <section className="panel gesture-panel" aria-label="Gestures">
-      {gestures.status === 'on' && (
-        <Preview stream={gestures.stream} action={gestures.action} progress={gestures.progress} />
-      )}
+      {gestures.status === 'on' && showPreview && <GesturePreview gestures={gestures} />}
       <div className="gesture-panel__body">
         <div className="gesture-panel__top">
           <p className="gesture-panel__message" aria-live="polite">
