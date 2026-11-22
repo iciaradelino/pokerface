@@ -15,6 +15,8 @@ import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import { turnFrom } from '../../gestures/detector.js';
 import { GesturePanel } from '../../gestures/GesturePanel.jsx';
 import { useGestures } from '../../gestures/useGestures.js';
+import { VideoTile } from '../../video/VideoTile.jsx';
+import { useVideo } from '../../video/useVideo.js';
 import './TablePage.css';
 
 // Where each spot sits on the felt, in % of the table (x, y). Spot 0 is you, at the bottom;
@@ -76,7 +78,19 @@ export function TablePage() {
     };
   }, [code, playerId]);
 
-  const { state: live, mine, connection, closeCode } = useTableSocket(code, playerId);
+  const {
+    state: live,
+    mine,
+    connection,
+    closeCode,
+    send,
+    onSignal,
+  } = useTableSocket(code, playerId);
+
+  // Video and sound between the players seated here (ui/video/). It goes player to player;
+  // the game service only relays the signals. Nobody else at the table receives it.
+  const seated = (live?.seats ?? table?.seats ?? []).map((seat) => seat.playerId);
+  const video = useVideo({ playerId, peerIds: seated, send, onSignal });
 
   // Gestures (ui/gestures/, Ali). On unless the profile turned them off, or the player switches
   // them off here. They send the same actions as the buttons, which always work too.
@@ -137,9 +151,16 @@ export function TablePage() {
           )}
           <span className="pill pill--quiet pill--sm">{handLabel}</span>
         </div>
-        <Button variant="outline" onClick={() => navigate('/lobby')}>
-          Leave table
-        </Button>
+        <div className="row">
+          {video.hasMic && (
+            <Button variant="outline" onClick={video.toggleMic} aria-pressed={!video.micOn}>
+              {video.micOn ? 'Mute' : 'Unmute'}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => navigate('/lobby')}>
+            Leave table
+          </Button>
+        </div>
       </header>
 
       <main className="table-page__main">
@@ -197,6 +218,7 @@ export function TablePage() {
                       ? seatNote(seat, { currentPlayer: state.currentPlayer, myPlayerId: playerId })
                       : ''
                   }
+                  video={video}
                   holeCards={
                     seat?.playerId === playerId
                       ? mine?.holeCards
@@ -230,7 +252,7 @@ export function TablePage() {
   );
 }
 
-function SeatSpot({ position, seat, code, isMe, colour, isDealer, note, holeCards }) {
+function SeatSpot({ position, seat, code, isMe, colour, isDealer, note, holeCards, video }) {
   const [x, y] = position;
   // Bets sit between the seat and the middle of the table.
   const betStyle = { left: `${x + (50 - x) * 0.42}%`, top: `${y + (50 - y) * 0.45}%` };
@@ -268,10 +290,18 @@ function SeatSpot({ position, seat, code, isMe, colour, isDealer, note, holeCard
           </div>
         )}
         <div className="seat__tile">
-          <svg className="seat__silhouette" viewBox="0 0 120 90" aria-hidden="true">
-            <circle cx="60" cy="34" r="16" />
-            <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
-          </svg>
+          <VideoTile
+            stream={isMe ? video.local : video.remotes[seat.playerId]?.stream}
+            isMe={isMe}
+            camera={video.camera}
+            state={video.remotes[seat.playerId]?.state}
+            onRetry={video.retry}
+          >
+            <svg className="seat__silhouette" viewBox="0 0 120 90" aria-hidden="true">
+              <circle cx="60" cy="34" r="16" />
+              <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
+            </svg>
+          </VideoTile>
           <span className="seat__strip">
             <span className="seat__name">{isMe ? 'You' : seat.name}</span>
             <span className="tabular">{formatChips(seat.stack)}</span>

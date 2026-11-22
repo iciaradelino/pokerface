@@ -16,6 +16,20 @@ vi.mock('../gestures/recognizer.js', () => ({
   createFrameReader: () => ({ recognize: () => fake.hands }),
 }));
 
+// The table also opens the camera for video; these tests count the gesture camera's calls.
+vi.mock('../video/useVideo.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useVideo: () => ({
+    camera: 'unavailable',
+    local: null,
+    remotes: {},
+    retry: () => {},
+    hasMic: false,
+    micOn: true,
+    toggleMic: () => {},
+  }),
+}));
+
 let clock = 0;
 let queued = [];
 
@@ -331,8 +345,8 @@ describe('gestures at the table', () => {
     await screen.findByLabelText(/^You, /);
     const socket = FakeSocket.latest;
     socket.open();
-    socket.send(STATE);
-    socket.send(PRIVATE);
+    socket.push(STATE);
+    socket.push(PRIVATE);
   }
 
   const actionBodies = (fetch) =>

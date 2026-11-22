@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { TablePage } from '../src/pages/TablePage.jsx';
+import { useTableSocket } from '../src/table/useTableSocket.js';
 import { clearPlayerId, savePlayerId } from '../src/player.js';
 import {
   arrangeSeats,
@@ -11,6 +20,7 @@ import {
   seatNote,
 } from '../src/table/tableView.js';
 import { FakeSocket } from './fakeSocket.js';
+import { fakeStream } from './fakePeerConnection.js';
 
 const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
 const SOFIA = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -106,8 +116,8 @@ async function renderLive(state = stateMessage(), mine = privateMessage()) {
   await screen.findByLabelText(/^You, /);
   const socket = FakeSocket.latest;
   socket.open();
-  socket.send(state);
-  if (mine) socket.send(mine);
+  socket.push(state);
+  if (mine) socket.push(mine);
   return socket;
 }
 
@@ -135,7 +145,7 @@ describe('TablePage', () => {
     expect(await screen.findByLabelText('You, 1,000 chips')).toBeInTheDocument();
     expect(screen.getByLabelText('Sofía, 1,000 chips')).toBeInTheDocument();
     expect(screen.getByText('Blinds 5 / 10')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Connecting to the table…');
+    expect(screen.getByText('Connecting to the table…')).toHaveAttribute('role', 'status');
     expect(screen.getAllByText('Empty seat')).toHaveLength(4);
     // The host comes from VITE_GAME_URL, so only the path is checked here.
     expect(FakeSocket.latest.url).toMatch(/^ws:\/\/[^/]+\/tables\/K7QX2M\/ws\?playerId=/);
@@ -191,8 +201,8 @@ describe('TablePage', () => {
     );
 
     // My turn on the turn card: "state" arrives before my new "private".
-    socket.send(stateMessage({ stage: 'turn', currentPlayer: ME }));
-    socket.send(privateMessage({ legalActions: ['fold', 'check', 'raise', 'allin'], toCall: 0 }));
+    socket.push(stateMessage({ stage: 'turn', currentPlayer: ME }));
+    socket.push(privateMessage({ legalActions: ['fold', 'check', 'raise', 'allin'], toCall: 0 }));
 
     expect(button('Raise to 20')).toBeEnabled();
     expect(button('Check')).toBeEnabled();
@@ -253,7 +263,7 @@ describe('TablePage', () => {
     const socket = await renderLive();
 
     socket.drop();
-    expect(screen.getByRole('status')).toHaveTextContent('Connection lost. Reconnecting…');
+    expect(screen.getByText('Connection lost. Reconnecting…')).toHaveAttribute('role', 'status');
     await vi.advanceTimersByTimeAsync(1000);
     expect(FakeSocket.all).toHaveLength(2);
     vi.useRealTimers();
@@ -289,8 +299,8 @@ describe('TablePage', () => {
     const socket = await renderLive();
 
     socket.onmessage({ data: 'not json' });
-    socket.send({ type: 'signal', from: SOFIA, to: ME, data: {} });
-    socket.send(privateMessage({ playerId: SOFIA, holeCards: ['2c', '3c'] }));
+    socket.push({ type: 'signal', from: SOFIA, to: ME, data: {} });
+    socket.push(privateMessage({ playerId: SOFIA, holeCards: ['2c', '3c'] }));
     expect(screen.queryByRole('img', { name: '2 of clubs' })).toBeNull();
     expect(screen.getByRole('img', { name: 'Ace of spades' })).toBeInTheDocument();
   });
@@ -317,6 +327,137 @@ describe('TablePage', () => {
 
     fireEvent.click(button('Leave table'));
     expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument();
+  });
+});
+
+describe('TablePage video', () => {
+  function withCamera(stream = fakeStream('mine', { audio: true })) {
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+    });
+    return stream;
+  }
+  const signals = (socket) => socket.sent.filter((message) => message.type === 'signal');
+
+  it('shows my camera and says when there is none', async () => {
+    mockServices();
+    await renderLive();
+    expect(screen.getAllByText('No camera').length).toBeGreaterThan(0);
+
+    cleanup();
+    FakeSocket.reset();
+    withCamera();
+    await renderLive();
+    expect(await screen.findByLabelText('Your camera')).toBeInTheDocument();
+  });
+
+  it('sends my video offer to the other player through the game service', async () => {
+    mockServices();
+    withCamera();
+    const socket = await renderLive();
+    await waitFor(() => expect(signals(socket)).toHaveLength(1));
+    expect(signals(socket)[0]).toMatchObject({ to: SOFIA });
+    expect(signals(socket)[0].data.description.type).toBe('offer');
+  });
+
+  it('answers an offer relayed by the game service', async () => {
+    mockServices();
+    // Their id sorts before mine, so on a clash I give way and answer them.
+    const EARLY = '00000000-0000-4000-8000-000000000009';
+    const socket = await renderLive(
+      stateMessage({
+        seats: [
+          { seat: 0, playerId: ME, name: 'Alex', stack: 980, bet: 0, status: 'active' },
+          { seat: 1, playerId: EARLY, name: 'Eli', stack: 970, bet: 0, status: 'active' },
+        ],
+      }),
+    );
+    socket.push({
+      type: 'signal',
+      from: EARLY,
+      to: ME,
+      data: { description: { type: 'offer', sdp: '' } },
+    });
+    await waitFor(() =>
+      expect(signals(socket).map((m) => m.data.description?.type)).toContain('answer'),
+    );
+    const answer = signals(socket).find((m) => m.data.description?.type === 'answer');
+    expect(answer.to).toBe(EARLY);
+  });
+
+  it('does not answer someone who is not seated at the table', async () => {
+    mockServices();
+    withCamera();
+    const socket = await renderLive();
+    await waitFor(() => expect(signals(socket)).toHaveLength(1));
+    socket.push({
+      type: 'signal',
+      from: 'cccccccc-0000-4000-8000-000000000003',
+      to: ME,
+      data: { description: { type: 'offer', sdp: '' } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(signals(socket)).toHaveLength(1);
+  });
+
+  it('lets me mute and unmute my microphone', async () => {
+    mockServices();
+    const stream = withCamera();
+    await renderLive();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mute' }));
+    expect(stream.getAudioTracks()[0].enabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute' }));
+    expect(stream.getAudioTracks()[0].enabled).toBe(true);
+  });
+
+  it('has no mute button without a microphone', async () => {
+    mockServices();
+    await renderLive();
+    expect(screen.queryByRole('button', { name: 'Mute' })).toBeNull();
+  });
+
+  it('turns the camera off when leaving the table', async () => {
+    mockServices();
+    const stream = withCamera();
+    await renderLive();
+    await screen.findByLabelText('Your camera');
+    cleanup();
+    expect(stream.getTracks().every((track) => track.stopped)).toBe(true);
+  });
+});
+
+describe('useTableSocket signals', () => {
+  const hook = (code = 'K7QX2M') =>
+    renderHook(({ table }) => useTableSocket(table, ME), { initialProps: { table: code } });
+
+  it('sends the signals made before the socket opened, once it opens', () => {
+    const { result } = hook();
+    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
+    const socket = FakeSocket.latest;
+    expect(socket.sent).toEqual([]);
+    socket.open();
+    expect(socket.sent).toEqual([
+      { type: 'signal', to: SOFIA, data: { candidate: { candidate: 'c' } } },
+    ]);
+  });
+
+  it('forgets the queued signals when the socket closes for good', () => {
+    const { result } = hook();
+    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
+    FakeSocket.latest.drop(4404);
+    expect(result.current.connection).toBe('closed');
+    // Whatever opens next (here a fake socket of the same hook) gets none of them.
+    FakeSocket.latest.open();
+    expect(FakeSocket.latest.sent).toEqual([]);
+  });
+
+  it('does not carry queued signals over to another table', () => {
+    const { result, rerender } = hook('K7QX2M');
+    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
+    rerender({ table: 'ABC234' });
+    FakeSocket.latest.open();
+    expect(FakeSocket.latest.url).toContain('/tables/ABC234/');
+    expect(FakeSocket.latest.sent).toEqual([]);
   });
 });
 
