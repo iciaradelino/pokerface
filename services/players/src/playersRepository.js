@@ -106,6 +106,32 @@ export function createPlayersRepository(pool) {
       }
     },
 
+    // For the profile page: when the player was created, how many hands they have finished, and
+    // their latest results, newest first. null if the player does not exist.
+    async history(id, { limit = 5 } = {}) {
+      const summary = await pool.request().input('id', sql.UniqueIdentifier, id)
+        .query(`SELECT p.created_at,
+                       (SELECT COUNT(*) FROM dbo.hand_results AS r WHERE r.player_id = p.id) AS hands
+                FROM dbo.players AS p WHERE p.id = @id`);
+      const player = summary.recordset[0];
+      if (!player) return null;
+      const recent = await pool
+        .request()
+        .input('id', sql.UniqueIdentifier, id)
+        .input('limit', sql.Int, limit)
+        .query(`SELECT TOP (@limit) hand_id, delta, created_at FROM dbo.hand_results
+                WHERE player_id = @id ORDER BY created_at DESC, hand_id`);
+      return {
+        since: new Date(player.created_at).toISOString(),
+        handsPlayed: player.hands,
+        recent: recent.recordset.map((row) => ({
+          handId: row.hand_id.toLowerCase(),
+          delta: row.delta,
+          playedAt: new Date(row.created_at).toISOString(),
+        })),
+      };
+    },
+
     // Top 10 by chips (issue #15), ties broken by name.
     async leaderboard() {
       const result = await pool

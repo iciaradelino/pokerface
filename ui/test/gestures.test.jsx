@@ -118,6 +118,27 @@ describe('useGestures', () => {
     expect(stream.getTracks()[0].stopped).toBe(true);
   });
 
+  it('uses the hold time from the profile, and follows a change without restarting', async () => {
+    const getUserMedia = stubCamera();
+    const onFire = vi.fn();
+    const { result, rerender } = setup({ onFire, holdMs: 500 });
+    await waitFor(() => expect(result.current.status).toBe('on'));
+
+    fake.hands = [hand('Thumb_Up')];
+    runFrames(600);
+    expect(onFire).toHaveBeenCalledTimes(1);
+
+    rerender({ onFire, holdMs: 2000 });
+    fake.hands = [];
+    runFrames(1500); // let the cooldown pass
+    fake.hands = [hand('Thumb_Up')];
+    runFrames(1500);
+    expect(onFire).toHaveBeenCalledTimes(1);
+    runFrames(600);
+    expect(onFire).toHaveBeenCalledTimes(2);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
   it('reports the raise amount and fires the raise', async () => {
     stubCamera();
     const onFire = vi.fn();

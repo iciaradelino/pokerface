@@ -10,8 +10,9 @@ export const isPlayerGone = (err) =>
 
 /**
  * Loads the player saved on this device.
- * Returns { playerId, player, unavailable, startOver }:
+ * Returns { playerId, player, setPlayer, unavailable, startOver }:
  *   player       null until loaded
+ *   setPlayer    replaces it, e.g. with the player a save returned
  *   unavailable  true when the players service could not be reached
  *   startOver()  forgets the player and opens "Create your player"
  * A player deleted on the server (or an old id on this device) starts over by itself.
@@ -42,5 +43,5 @@ export function usePlayer() {
     };
   }, [playerId, startOver]);
 
-  return { playerId, player, unavailable, startOver };
+  return { playerId, player, setPlayer, unavailable, startOver };
 }

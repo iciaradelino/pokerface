@@ -80,18 +80,27 @@ async function renderTutorial(url = '/tutorial?next=%2Ftables%2FK7QX2M') {
   await screen.findByText('Show a gesture.');
 }
 
-// The step list is labelled by its "n of 5 done" heading.
-const steps = () => screen.getByRole('region', { name: /of 5 done/ });
+// How many are learned, from the bar under the title; and the gesture being practised now.
+const learned = () =>
+  screen.getByRole('progressbar', { name: 'Gestures learned' }).getAttribute('aria-valuenow');
+const practising = () => screen.getByRole('heading', { level: 2 });
+const badgeOf = (name) =>
+  within(screen.getByRole('region', { name: 'All gestures' }))
+    .getByText(name, { selector: '.tutorial__item-name' })
+    .closest('li');
 
 describe('gesture tutorial', () => {
   it('walks through every gesture and says when each one is recognised', async () => {
     await renderTutorial();
-    expect(within(steps()).getByRole('heading')).toHaveTextContent('0 of 5 done');
-    expect(screen.getByText(/^Now:/)).toHaveTextContent('Check');
+    expect(screen.getByText('0 of 5 learned')).toBeInTheDocument();
+    expect(practising()).toHaveTextContent('Check');
+    expect(badgeOf('Check')).toHaveTextContent('Now');
 
     frames(knock(0.4), knock(0.5), knock(0.4), knock(0.5), knock(0.4));
     expect(screen.getByRole('status')).toHaveTextContent('✓ Check recognised.');
-    expect(screen.getByText(/^Now:/)).toHaveTextContent('Call');
+    expect(practising()).toHaveTextContent('Call');
+    expect(badgeOf('Check')).toHaveTextContent('Learned');
+    expect(learned()).toBe('1');
     rest();
 
     hold([hand('Thumb_Up')], 1100);
@@ -121,12 +130,58 @@ describe('gesture tutorial', () => {
     await renderTutorial();
     hold([hand('Thumb_Down')], 1100);
     expect(screen.getByRole('status')).toHaveTextContent('That was Fold. Try Check.');
-    expect(within(steps()).getByRole('heading')).toHaveTextContent('0 of 5 done');
+    expect(learned()).toBe('0');
+  });
+
+  it('shows when a hand is tracked and how long is left to hold', async () => {
+    await renderTutorial();
+    expect(screen.getByText('No hand in view')).toBeInTheDocument();
+    hold([hand('Thumb_Up')], 550);
+    expect(screen.getByText('Hand tracked')).toBeInTheDocument();
+    expect(
+      screen.getByText('Thumbs up', { selector: '.tutorial__hold-title' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Keep holding… 0\.[4-5] s$/)).toBeInTheDocument();
+  });
+
+  it('moves on to the next gesture and comes back to the skipped one at the end', async () => {
+    await renderTutorial();
+    fireEvent.click(screen.getByRole('button', { name: 'Next gesture' }));
+    expect(practising()).toHaveTextContent('Call');
+    expect(badgeOf('Check')).toHaveTextContent('Next');
+
+    for (const name of ['Call', 'Fold', 'Raise']) {
+      expect(practising()).toHaveTextContent(name);
+      fireEvent.click(screen.getByRole('button', { name: 'Next gesture' }));
+    }
+    expect(practising()).toHaveTextContent('All-in');
+    fireEvent.click(screen.getByRole('button', { name: 'Next gesture' }));
+    expect(practising()).toHaveTextContent('Check');
+  });
+
+  it('uses the hold time from the profile in the explanation', async () => {
+    fetch.mockImplementation(async () =>
+      json(200, {
+        id: ME,
+        name: 'Alex',
+        avatar: '#B8F23A',
+        chips: 1000,
+        gestureSettings: { holdMs: 1500 },
+      }),
+    );
+    await renderTutorial();
+    fireEvent.click(screen.getByRole('button', { name: 'Next gesture' }));
+    // The hold time keeps "1.5 s" on one line with a no-break space.
+    expect(
+      await screen.findByText('Show a thumbs up and hold it for 1.5 s to match the bet.', {
+        normalizer: (text) => text,
+      }),
+    ).toBeInTheDocument();
   });
 
   it('can be skipped, back to where the player came from', async () => {
     await renderTutorial();
-    fireEvent.click(screen.getByRole('link', { name: 'Skip the tutorial' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Skip for now' }));
     expect(screen.getByText('Waiting room')).toBeInTheDocument();
     expect(camera.getTracks()[0].stopped).toBe(true);
     expect(tutorialDone()).toBe(false);
@@ -185,15 +240,12 @@ describe('gesture tutorial', () => {
 
   it('does not leave the app from a crafted Skip link', async () => {
     await renderTutorial('/tutorial?next=%2F%5Cexample.com');
-    expect(screen.getByRole('link', { name: 'Skip the tutorial' })).toHaveAttribute(
-      'href',
-      '/lobby',
-    );
+    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute('href', '/lobby');
   });
 
   it('does not leave the app from a Skip link with dots in it', async () => {
     await renderTutorial('/tutorial?next=%2F..%2F%2Fexample.com');
-    const skip = screen.getByRole('link', { name: 'Skip the tutorial' });
+    const skip = screen.getByRole('link', { name: 'Skip for now' });
     expect(skip).toHaveAttribute('href', '/lobby');
     fireEvent.click(skip);
     expect(screen.getByText('Lobby')).toBeInTheDocument();

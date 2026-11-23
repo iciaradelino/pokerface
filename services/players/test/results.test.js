@@ -123,3 +123,38 @@ describe('GET /leaderboard', () => {
     expect(response.body.code).toBe('UNAVAILABLE');
   });
 });
+
+describe('GET /players/:id/history', () => {
+  it('starts with no hands', async () => {
+    const player = await createPlayer('Laura');
+    const response = await request(app).get(`/players/${player.id}/history`);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ since: expect.any(String), handsPlayed: 0, recent: [] });
+  });
+
+  it('counts every hand once and lists the newest first', async () => {
+    const player = await createPlayer('Laura');
+    await saveResult(player.id, { handId: hand1, delta: 250 });
+    await saveResult(player.id, { handId: hand1, delta: 250 }); // a retry is not a new hand
+    await saveResult(player.id, { handId: hand2, delta: -50 });
+    const response = await request(app).get(`/players/${player.id}/history`);
+    expect(response.body.handsPlayed).toBe(2);
+    expect(response.body.recent.map((hand) => [hand.handId, hand.delta])).toEqual([
+      [hand2, -50],
+      [hand1, 250],
+    ]);
+  });
+
+  it('answers 404 for an unknown player and 400 for a bad id', async () => {
+    expect((await request(app).get(`/players/${missingId}/history`)).status).toBe(404);
+    expect((await request(app).get('/players/nope/history')).status).toBe(400);
+  });
+
+  it('answers 503 when the database is down', async () => {
+    const player = await createPlayer('Laura');
+    vi.spyOn(players, 'history').mockRejectedValueOnce(new Error('private details'));
+    const response = await request(app).get(`/players/${player.id}/history`);
+    expect(response.status).toBe(503);
+    expect(response.text).not.toContain('private');
+  });
+});

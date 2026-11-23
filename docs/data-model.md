@@ -72,6 +72,7 @@ All errors use `{ "message": "...", "code": "..." }`. Codes: `INVALID_INPUT` (40
 | `PUT /players/:id` | `{ name, avatar?, gestureSettings? }` | `200` + Player |
 | `DELETE /players/:id` | | `204` |
 | `POST /players/:id/results` | `{ handId, delta }` (`delta` is an integer) | `200` + updated Player, also when `handId` was already saved |
+| `GET /players/:id/history` | | `200` + `{ since, handsPlayed, recent: [{ handId, delta, playedAt }] }`, the 5 newest hands first (profile page) |
 | `GET /leaderboard` | | `200` + top 10 as `[{ id, name, chips }]` |
 
 Player as returned by the API:

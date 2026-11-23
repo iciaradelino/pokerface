@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { cameraProblem } from '../video/useVideo.js';
-import { createDetector } from './detector.js';
+import { TIMING, createDetector } from './detector.js';
 import { createFrameReader, loadGestureRecognizer } from './recognizer.js';
 
 // 640x480 gives MediaPipe enough detail; the picture is only used on this device.
@@ -18,6 +18,7 @@ const STARTING = {
   raising: false,
   raiseAmount: null,
   cooling: false,
+  hand: false,
 };
 
 /**
@@ -33,8 +34,11 @@ const STARTING = {
  *   onFire         (action, amount?) when a gesture is confirmed
  *   onProgress     (action, 0..1) while a gesture is held; (null, 0) when it is let go
  *   onRaiseAmount  (amount) while an open palm picks a raise
+ *   holdMs         how long call, fold and all-in must be held (the profile's "Hold to confirm");
+ *                  a change applies straight away, without restarting the camera
  *
- * Returns { status, problem, stream, action, progress, raising, raiseAmount, cooling, retry }:
+ * Returns { status, problem, stream, action, progress, raising, raiseAmount, cooling, hand, retry }:
+ *   hand     true while a hand is in view (the tutorial's "Hand tracked")
  *   status   "off" | "starting" | "on" | "error"
  *   problem  with "error": "denied" (camera blocked), "unavailable" (no camera) or "model"
  *            (gesture recognition could not load). The buttons still work in every case.
@@ -47,14 +51,17 @@ export function useGestures({
   onFire,
   onProgress,
   onRaiseAmount,
+  holdMs = TIMING.holdMs,
 }) {
   const [view, setView] = useState(STARTING);
   const [attempt, setAttempt] = useState(0);
   const turnRef = useRef(turn);
   const callbacks = useRef({ onFire, onProgress, onRaiseAmount });
+  const holdRef = useRef(holdMs);
 
   useEffect(() => {
     turnRef.current = turn;
+    holdRef.current = holdMs;
     callbacks.current = { onFire, onProgress, onRaiseAmount };
   });
 
@@ -103,7 +110,13 @@ export function useGestures({
       if (stopped) return undefined;
 
       const reader = createFrameReader(recognizer, video);
-      const detector = createDetector();
+      // The detector reads holdMs on every frame, so it follows the current setting.
+      const detector = createDetector({
+        ...TIMING,
+        get holdMs() {
+          return holdRef.current;
+        },
+      });
       let last = { ...STARTING, status: 'on', stream: camera };
       setView(last);
 
@@ -111,7 +124,10 @@ export function useGestures({
         if (stopped) return;
         const now = performance.now();
         const hands = reader.recognize(now);
-        if (hands) last = publish(last, detector.update(hands, now, turnRef.current));
+        if (hands) {
+          const out = detector.update(hands, now, turnRef.current);
+          last = publish(last, { ...out, hand: hands.length > 0 });
+        }
         frame = requestAnimationFrame(tick);
       };
       frame = requestAnimationFrame(tick);
