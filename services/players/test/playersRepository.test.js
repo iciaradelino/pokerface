@@ -164,3 +164,41 @@ describe('leaderboard', () => {
     expect(pool.log[0].text).toContain('ORDER BY chips DESC, name ASC');
   });
 });
+
+describe('history', () => {
+  it('returns null for an unknown player without asking for results', async () => {
+    const pool = fakePool();
+    expect(await createPlayersRepository(pool).history(expected.id)).toBeNull();
+    expect(pool.log).toHaveLength(1);
+  });
+
+  it('returns the start date, hand count and latest results with lower-case ids', async () => {
+    const pool = fakePool((text) =>
+      text.includes('COUNT(*)')
+        ? { recordset: [{ created_at: new Date('2026-10-01T09:00:00Z'), hands: 2 }] }
+        : {
+            recordset: [
+              {
+                hand_id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+                delta: -50,
+                created_at: new Date('2026-11-20T18:30:00Z'),
+              },
+            ],
+          },
+    );
+    const history = await createPlayersRepository(pool).history(expected.id, { limit: 3 });
+    expect(history).toEqual({
+      since: '2026-10-01T09:00:00.000Z',
+      handsPlayed: 2,
+      recent: [
+        {
+          handId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          delta: -50,
+          playedAt: '2026-11-20T18:30:00.000Z',
+        },
+      ],
+    });
+    expect(pool.log[1].text).toContain('ORDER BY created_at DESC');
+    expect(pool.log[1].inputs).toEqual({ id: expected.id, limit: 3 });
+  });
+});

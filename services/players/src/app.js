@@ -123,6 +123,18 @@ export function createApp({
     ),
   );
 
+  // The profile page's "Playing since", hand count and recent hands.
+  app.get(
+    '/players/:id/history',
+    withValidId(
+      route(async (request, response) => {
+        const history = await players.history(request.params.id);
+        if (!history) return sendError(response, 404, 'NOT_FOUND', 'Player not found');
+        response.json(history);
+      }),
+    ),
+  );
+
   app.get(
     '/leaderboard',
     route(async (_request, response) => {

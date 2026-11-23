@@ -15,6 +15,8 @@ export const playersApi = {
   update: (id, changes) =>
     players(`/players/${encodeURIComponent(id)}`, { method: 'PUT', body: changes }),
   remove: (id) => players(`/players/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Returns { since, handsPlayed, recent: [{ handId, delta, playedAt }] }, newest hand first. */
+  history: (id) => players(`/players/${encodeURIComponent(id)}/history`),
   leaderboard: () => players('/leaderboard'),
   health: () => players('/health'),
 };

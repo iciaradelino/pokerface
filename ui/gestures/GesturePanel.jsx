@@ -91,8 +91,11 @@ export function GestureHold({ gestures, size = 96 }) {
   );
 }
 
-/** My own camera, mirrored, with the ring on top (the panel here and the gesture tutorial). */
-export function GesturePreview({ gestures }) {
+/**
+ * My own camera, mirrored, with the ring on top (the panel here and the gesture tutorial).
+ * `children`, when given, is laid over the camera instead of the ring.
+ */
+export function GesturePreview({ gestures, children }) {
   const videoRef = useRef(null);
   const { stream } = gestures;
   useEffect(() => {
@@ -104,7 +107,7 @@ export function GesturePreview({ gestures }) {
   return (
     <div className="gesture-preview">
       <video ref={videoRef} muted playsInline aria-label="Your camera" />
-      <GestureHold gestures={gestures} />
+      {children ?? <GestureHold gestures={gestures} />}
     </div>
   );
 }

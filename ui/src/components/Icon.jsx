@@ -12,6 +12,16 @@ const PATHS = {
       <path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.5l-2.3 7A2 2 0 0 1 17.5 21H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3l3.6-7a2.4 2.4 0 0 1 4.4 1.9Z" />
     </>
   ),
+  thumbsDown: (
+    // The thumbs up, upside down.
+    <g transform="matrix(1 0 0 -1 0 24)">
+      <path d="M7 10v11" />
+      <path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.5l-2.3 7A2 2 0 0 1 17.5 21H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3l3.6-7a2.4 2.4 0 0 1 4.4 1.9Z" />
+    </g>
+  ),
+  knock: <path d="M9 4v9M15 4v9M4 19h16" />,
+  upDown: <path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" />,
+  allIn: <path d="m4 7 5 5-5 5M11 7l5 5-5 5M20 6v12" />,
   chip: (
     <>
       <circle cx="12" cy="12" r="9" />

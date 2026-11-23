@@ -14,6 +14,7 @@ import { useTableSocket } from '../table/useTableSocket.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import { turnFrom } from '../../gestures/detector.js';
 import { GestureHold, GesturePanel } from '../../gestures/GesturePanel.jsx';
+import { holdMsOf } from '../gestureSettings.js';
 import { useGestures } from '../../gestures/useGestures.js';
 import { VideoTile } from '../../video/VideoTile.jsx';
 import { useVideo } from '../../video/useVideo.js';
@@ -122,6 +123,7 @@ export function TablePage() {
     cameraPending: video.camera === 'asking',
     turn: gestureSend.busy ? null : turnFrom({ myTurn, mine, bigBlind: table?.bigBlind }),
     onFire: sendGesture,
+    holdMs: holdMsOf(player),
   });
 
   // Not at this table yet (e.g. someone opened the link): the waiting room seats you first.

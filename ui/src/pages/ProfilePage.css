@@ -1,0 +1,275 @@
+.profile {
+  min-height: 100vh;
+}
+
+/* ---------- Layout: you and your hands on the left, settings on the right ---------- */
+
+.profile__main {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--column-gap);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-8) var(--space-12);
+}
+
+.profile__side,
+.profile__content,
+.profile__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--column-gap);
+}
+
+.profile__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.profile__head h1,
+.profile__content > h1 {
+  font-size: var(--text-page-title);
+}
+
+.profile__save {
+  gap: var(--space-4);
+}
+
+.profile__saved {
+  font-weight: 600;
+  color: var(--color-positive);
+}
+
+/* ---------- Player card ---------- */
+
+.profile__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.profile__tile {
+  position: relative;
+  width: 100%;
+  max-width: 190px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 3px solid var(--chosen);
+  border-radius: var(--radius-tile);
+  background: var(--color-tile-bg);
+}
+
+.profile__silhouette {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--chosen);
+}
+
+.profile__name {
+  font-family: var(--font-display);
+  font-size: var(--text-section-lg);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.profile__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.profile__stats .stat {
+  align-items: center;
+  padding: var(--space-3) var(--space-2);
+}
+
+.profile__stat-lime {
+  color: var(--color-lime);
+}
+
+/* ---------- Recent hands ---------- */
+
+.profile__hands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.profile__hand-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile__hand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.profile__hand-title {
+  font-weight: 700;
+}
+
+.profile__delta {
+  font-weight: 700;
+}
+
+.profile__delta--won {
+  color: var(--color-positive);
+}
+
+.profile__delta--lost {
+  color: var(--color-negative);
+}
+
+.profile__delta--even {
+  color: var(--color-muted);
+}
+
+/* ---------- Settings sections ---------- */
+
+.profile__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.profile__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.profile__link {
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--color-lime-text);
+}
+
+.profile__player-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-6);
+}
+
+.profile__colours {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.profile__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.profile__swatch {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.profile__swatch-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.profile__swatch:hover .profile__swatch-dot {
+  transform: scale(1.06);
+}
+
+.profile__swatch:has(input:checked) {
+  box-shadow:
+    0 0 0 3px var(--color-surface),
+    0 0 0 5px var(--color-ink);
+}
+
+.profile__swatch:has(input:focus-visible) {
+  outline: 3px solid var(--color-lime);
+  outline-offset: 4px;
+}
+
+.profile__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  cursor: pointer;
+}
+
+.profile__toggle-title {
+  font-weight: 700;
+}
+
+.profile__hold {
+  max-width: 480px;
+}
+
+.profile__hold-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.profile__hold-value {
+  font-weight: 700;
+}
+
+.profile__hold .range:disabled {
+  opacity: 0.5;
+}
+
+/* ---------- Delete ---------- */
+
+.profile__danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.profile__danger-title {
+  font-size: var(--text-section);
+  color: var(--color-negative);
+}
+
+.profile__danger-error {
+  font-weight: 600;
+  color: var(--color-negative);
+}
+
+@media (max-width: 860px) {
+  .profile__main {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-6) var(--space-4) var(--space-10);
+  }
+
+  .profile__content {
+    order: -1;
+  }
+
+  .profile__player-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
