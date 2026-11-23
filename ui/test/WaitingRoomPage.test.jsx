@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { WaitingRoomPage } from '../src/pages/WaitingRoomPage.jsx';
 import { clearPlayerId, getPlayerId, savePlayerId } from '../src/player.js';
+import { FakeSocket } from './fakeSocket.js';
+import { fakeStream } from './fakePeerConnection.js';
 
 const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
 const SOFIA = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -65,7 +67,11 @@ function renderRoom(path = '/tables/K7QX2M', pollMs = 60_000) {
 const seatList = () => screen.findByRole('list', { name: 'Seats' });
 const startButton = () => screen.getByRole('button', { name: 'Start game' });
 
-beforeEach(() => savePlayerId(ME));
+beforeEach(() => {
+  savePlayerId(ME);
+  FakeSocket.reset();
+  vi.stubGlobal('WebSocket', FakeSocket);
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   clearPlayerId();
@@ -274,5 +280,90 @@ describe('WaitingRoomPage', () => {
     expect(
       await screen.findByText(`Copy this link: ${window.location.origin}/tables/K7QX2M`),
     ).toBeInTheDocument();
+  });
+});
+
+describe('WaitingRoomPage video', () => {
+  const twoSeats = [{ seatIndex: 0, playerId: ME, name: 'Alex', stack: 1000 }, sofiaSeat(1)];
+  const bothSeated = () =>
+    mockServices({
+      'POST /tables/K7QX2M/join': () => json(200, { table: makeTable({ seats: twoSeats }) }),
+    });
+  function withCamera(stream = fakeStream('mine', { audio: true })) {
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+    });
+    return stream;
+  }
+  const signals = (socket) => socket.sent.filter((message) => message.type === 'signal');
+
+  it('shows my camera in my seat', async () => {
+    bothSeated();
+    withCamera();
+    renderRoom();
+    await seatList();
+    expect(await screen.findByLabelText('Your camera')).toBeInTheDocument();
+  });
+
+  it('says so in my seat when there is no camera', async () => {
+    bothSeated();
+    renderRoom();
+    const seats = within(await seatList()).getAllByRole('listitem');
+    expect(await within(seats[0]).findByText('No camera')).toBeInTheDocument();
+    expect(within(seats[1]).getByText('Connecting video…')).toBeInTheDocument();
+  });
+
+  it('sends my offer to the other player through the table socket', async () => {
+    bothSeated();
+    withCamera();
+    renderRoom();
+    await seatList();
+    const socket = FakeSocket.latest;
+    expect(socket.url).toContain(`/tables/K7QX2M/ws?playerId=${ME}`);
+    socket.open();
+    await waitFor(() => expect(signals(socket)).toHaveLength(1));
+    expect(signals(socket)[0]).toMatchObject({ to: SOFIA });
+    expect(signals(socket)[0].data.description.type).toBe('offer');
+  });
+
+  it('does not connect video to someone who is not seated', async () => {
+    bothSeated();
+    withCamera();
+    renderRoom();
+    await seatList();
+    const socket = FakeSocket.latest;
+    socket.open();
+    await waitFor(() => expect(signals(socket)).toHaveLength(1));
+    socket.push({
+      type: 'signal',
+      from: 'cccccccc-0000-4000-8000-000000000003',
+      to: ME,
+      data: { description: { type: 'offer', sdp: '' } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(signals(socket)).toHaveLength(1);
+  });
+
+  it('lets me mute and unmute my microphone', async () => {
+    bothSeated();
+    const stream = withCamera();
+    renderRoom();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mute microphone' }));
+    expect(stream.getAudioTracks()[0].enabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute microphone' }));
+    expect(stream.getAudioTracks()[0].enabled).toBe(true);
+  });
+
+  it('turns the camera off when moving on to the table', async () => {
+    const stream = withCamera();
+    mockServices({
+      'POST /tables/K7QX2M/join': () => json(200, { table: makeTable({ seats: twoSeats }) }),
+      'POST /tables/K7QX2M/start': () => json(200, makeTable({ seats: twoSeats, paused: false })),
+    });
+    renderRoom();
+    await screen.findByLabelText('Your camera');
+    fireEvent.click(startButton());
+    expect(await screen.findByRole('heading', { name: 'Game started' })).toBeInTheDocument();
+    expect(stream.getTracks().every((track) => track.stopped)).toBe(true);
   });
 });

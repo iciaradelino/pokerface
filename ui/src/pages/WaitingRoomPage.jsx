@@ -8,7 +8,10 @@ import { formatChips } from '../components/Chips.jsx';
 import { TopBar } from '../components/TopBar.jsx';
 import { isCompleteCode, normalizeCode } from '../tableCode.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
+import { useTableSocket } from '../table/useTableSocket.js';
 import { tutorialDone } from '../../gestures/GestureTutorial.jsx';
+import { VideoTile } from '../../video/VideoTile.jsx';
+import { useVideo } from '../../video/useVideo.js';
 import './WaitingRoomPage.css';
 
 // How often the seats are refreshed, and how players who are not the host find out that the
@@ -163,6 +166,17 @@ function Room({ code, table, playerId, player, stale, onStart }) {
   const isHost = table.createdBy === playerId;
   const hostName = isHost ? 'You' : (host?.name ?? 'The host');
 
+  // Faces and voices from the waiting room on, between the players seated here (ui/video/). The
+  // table socket is only used to relay the video signals. Once the game starts the table page
+  // opens its own, so the picture blinks for a moment when moving there.
+  const { send, onSignal } = useTableSocket(code, playerId);
+  const video = useVideo({
+    playerId,
+    peerIds: table.seats.map((seat) => seat.playerId),
+    send,
+    onSignal,
+  });
+
   return (
     <>
       <div className="waiting__head">
@@ -175,7 +189,14 @@ function Room({ code, table, playerId, player, stale, onStart }) {
             Waiting for players · {taken} of {table.maxSeats} seats taken
           </p>
         </div>
-        <InviteCard code={code} />
+        <div className="stack" style={{ gap: 'var(--space-3)', alignItems: 'flex-end' }}>
+          <InviteCard code={code} />
+          {video.hasMic && (
+            <Button variant="outline" onClick={video.toggleMic} aria-pressed={!video.micOn}>
+              {video.micOn ? 'Mute microphone' : 'Unmute microphone'}
+            </Button>
+          )}
+        </div>
       </div>
 
       {stale && (
@@ -192,6 +213,7 @@ function Room({ code, table, playerId, player, stale, onStart }) {
               seat={seat}
               isYou={seat?.playerId === playerId}
               isHost={seat?.playerId === table.createdBy}
+              video={video}
               colour={
                 seat?.playerId === playerId && player ? player.avatar : (seat?.playerId ?? index)
               }
@@ -316,7 +338,7 @@ function InviteCard({ code }) {
   );
 }
 
-function SeatTile({ seat, isYou, isHost, colour }) {
+function SeatTile({ seat, isYou, isHost, colour, video }) {
   if (!seat) {
     return (
       <li className="waiting__seat waiting__seat--empty">
@@ -327,10 +349,18 @@ function SeatTile({ seat, isYou, isHost, colour }) {
   }
   return (
     <li className="waiting__seat" style={{ '--seat-colour': playerColour(colour) }}>
-      <svg className="waiting__silhouette" viewBox="0 0 120 90" aria-hidden="true">
-        <circle cx="60" cy="34" r="16" />
-        <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
-      </svg>
+      <VideoTile
+        stream={isYou ? video.local : video.remotes[seat.playerId]?.stream}
+        isMe={isYou}
+        camera={video.camera}
+        state={video.remotes[seat.playerId]?.state}
+        onRetry={video.retry}
+      >
+        <svg className="waiting__silhouette" viewBox="0 0 120 90" aria-hidden="true">
+          <circle cx="60" cy="34" r="16" />
+          <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
+        </svg>
+      </VideoTile>
       {isHost && <span className="waiting__badge">Host</span>}
       <span className="waiting__name">
         {seat.name}
