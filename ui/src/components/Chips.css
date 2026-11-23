@@ -33,3 +33,14 @@
   font-weight: 800;
   box-shadow: 0 2px 6px rgba(15, 26, 20, 0.3);
 }
+
+/* The S and B blind coins share the dealer button's shape */
+.blind-button--small {
+  background: var(--color-small-blind);
+  color: var(--color-on-blind);
+}
+
+.blind-button--big {
+  background: var(--color-big-blind);
+  color: var(--color-on-blind);
+}
