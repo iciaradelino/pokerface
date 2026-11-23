@@ -27,6 +27,25 @@ export function ChipAmount({ amount, label }) {
   );
 }
 
+const BLINDS = {
+  small: { letter: 'S', label: 'Small blind' },
+  big: { letter: 'B', label: 'Big blind' },
+};
+
+/** "S" or "B" coin, like the dealer button, for the small and big blind. kind: "small" | "big" */
+export function BlindButton({ kind }) {
+  const { letter, label } = BLINDS[kind];
+  return (
+    <span
+      className={`dealer-button blind-button blind-button--${kind}`}
+      role="img"
+      aria-label={label}
+    >
+      {letter}
+    </span>
+  );
+}
+
 /** Yellow "D" dealer button. */
 export function DealerButton() {
   return (

@@ -15,6 +15,7 @@ import { useTableSocket } from '../src/table/useTableSocket.js';
 import { clearPlayerId, savePlayerId } from '../src/player.js';
 import {
   arrangeSeats,
+  blindPlayers,
   formatClock,
   potRaise,
   secondsLeft,
@@ -164,6 +165,9 @@ describe('TablePage', () => {
     expect(screen.getByText('Pot 40')).toBeInTheDocument();
     expect(screen.getByLabelText('You, 980 chips, Your turn')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Dealer' })).toBeInTheDocument();
+    // Heads-up the dealer (Sofía) posts the small blind and I post the big blind
+    expect(screen.getByRole('img', { name: 'Small blind' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Big blind' })).toBeInTheDocument();
     expect(screen.getByText(/^Your turn · 0:1\d$/)).toBeInTheDocument();
   });
 
@@ -527,6 +531,25 @@ describe('table helpers', () => {
     expect(spots.filter((s) => s.seat === null)).toHaveLength(4);
     expect(spots[5].seat).toBeNull();
     expect(arrangeSeats(seats, 6, 'nobody')[1].seat.playerId).toBe('a');
+  });
+
+  it('finds the small and big blind from the dealer', () => {
+    const seat = (n, playerId, status = 'active') => ({ seat: n, playerId, status });
+    // Heads-up: the dealer posts the small blind
+    expect(blindPlayers([seat(0, 'a'), seat(3, 'b')], 'b')).toEqual({
+      smallBlind: 'b',
+      bigBlind: 'a',
+    });
+    // Three or more: the next two players after the dealer, skipping anyone not in the hand
+    const table = [seat(0, 'a'), seat(1, 'b', 'waiting'), seat(2, 'c', 'folded'), seat(4, 'd')];
+    expect(blindPlayers(table, 'd')).toEqual({ smallBlind: 'a', bigBlind: 'c' });
+    expect(blindPlayers(table, 'a')).toEqual({ smallBlind: 'c', bigBlind: 'd' });
+    // No hand, or no dealer at the table
+    expect(blindPlayers([seat(0, 'a', 'waiting'), seat(1, 'b', 'waiting')], 'a')).toEqual({
+      smallBlind: null,
+      bigBlind: null,
+    });
+    expect(blindPlayers(table, 'nobody')).toEqual({ smallBlind: null, bigBlind: null });
   });
 
   it('keeps the clockwise order of the players after me', () => {

@@ -5,12 +5,18 @@ import { ApiError } from '../api/http.js';
 import { playersApi } from '../api/playersApi.js';
 import { playerColour } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
-import { ChipAmount, DealerButton, formatChips } from '../components/Chips.jsx';
+import { BlindButton, ChipAmount, DealerButton, formatChips } from '../components/Chips.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { CardSlot, PlayingCard } from '../components/PlayingCard.jsx';
 import { normalizeCode } from '../tableCode.js';
 import { ActionBar } from '../table/ActionBar.jsx';
-import { STAGE_LABELS, arrangeSeats, potTotal, seatNote } from '../table/tableView.js';
+import {
+  STAGE_LABELS,
+  arrangeSeats,
+  blindPlayers,
+  potTotal,
+  seatNote,
+} from '../table/tableView.js';
 import { useTableSocket } from '../table/useTableSocket.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import { turnFrom } from '../../gestures/detector.js';
@@ -162,6 +168,7 @@ export function TablePage() {
       : 'No hand yet';
 
   const inHand = !['waiting', 'complete'].includes(stage);
+  const blinds = inHand ? blindPlayers(state?.seats, state?.dealer) : {};
   // The buttons start folded away while gestures work, to make gestures the way to play. With
   // gestures off or no camera they start open, since they are the only way to act.
   const buttonsOpen = buttonsChoice ?? !['on', 'starting'].includes(gestures.status);
@@ -262,6 +269,11 @@ export function TablePage() {
                     isMe={seat?.playerId === playerId}
                     colour={seat?.playerId === playerId && player ? player.avatar : seat?.playerId}
                     isDealer={seat !== null && seat.playerId === state.dealer}
+                    blind={
+                      (seat && seat.playerId === blinds.smallBlind && 'small') ||
+                      (seat && seat.playerId === blinds.bigBlind && 'big') ||
+                      null
+                    }
                     won={winnings(state.result, seat?.playerId)}
                     hasCards={inHand && (seat?.status === 'active' || seat?.status === 'allin')}
                     note={
@@ -343,6 +355,7 @@ function SeatSpot({
   isMe,
   colour,
   isDealer,
+  blind,
   won,
   hasCards,
   note,
@@ -366,7 +379,7 @@ function SeatSpot({
     isMe && 'seat--me',
     note === 'Your turn' || note === 'Thinking…' ? 'seat--acting' : '',
     seat.status === 'folded' && 'seat--folded',
-    isDealer && 'seat--dealer',
+    (isDealer || blind) && 'seat--marked',
     won > 0 && 'seat--winner',
   ]
     .filter(Boolean)
@@ -413,10 +426,11 @@ function SeatSpot({
               <span className="seat__stack tabular">{formatChips(seat.stack)}</span>
             </span>
           </div>
-          {/* On the tile's corner, above everything, so bets and cards never cover it */}
-          {isDealer && (
-            <span className="seat__dealer">
-              <DealerButton />
+          {/* D, S and B coins on the tile's corner, above everything, so nothing covers them */}
+          {(isDealer || blind) && (
+            <span className="seat__markers">
+              {isDealer && <DealerButton />}
+              {blind && <BlindButton kind={blind} />}
             </span>
           )}
         </div>

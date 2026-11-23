@@ -39,6 +39,25 @@ export function arrangeSeats(seats, maxSeats, myPlayerId) {
   }));
 }
 
+const IN_HAND = ['active', 'folded', 'allin'];
+
+/**
+ * Who posted the small and big blind this hand, worked out the way the engine does
+ * (services/game/src/engine/hand.js): the players in the hand go in seat order; heads-up the
+ * dealer posts the small blind, otherwise the next two players after the dealer post them.
+ * Returns { smallBlind, bigBlind } as player ids, both null outside a hand.
+ */
+export function blindPlayers(seats = [], dealer) {
+  const inHand = seats
+    .filter((seat) => IN_HAND.includes(seat.status))
+    .sort((a, b) => a.seat - b.seat);
+  const button = inHand.findIndex((seat) => seat.playerId === dealer);
+  if (button === -1 || inHand.length < 2) return { smallBlind: null, bigBlind: null };
+  const small = inHand.length === 2 ? button : (button + 1) % inHand.length;
+  const big = (small + 1) % inHand.length;
+  return { smallBlind: inHand[small].playerId, bigBlind: inHand[big].playerId };
+}
+
 /** Total chips in all pots. */
 export function potTotal(pots = []) {
   return pots.reduce((sum, pot) => sum + pot.amount, 0);
