@@ -98,6 +98,16 @@
   background: var(--color-tile-bg);
 }
 
+/* The picture fills the tile; its notice goes on top so it does not cover the name. */
+.waiting__seat .video-tile {
+  position: absolute;
+  inset: 0;
+}
+
+.waiting__seat .video-tile__notice {
+  inset: 0 0 auto 0;
+}
+
 .waiting__silhouette {
   position: absolute;
   inset: 0;
