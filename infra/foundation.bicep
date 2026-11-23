@@ -16,6 +16,14 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
+module monitoring './monitoring/main.bicep' = {
+  name: '${prefix}-monitoring'
+  params: {
+    location: location
+    workspaceName: logs.name
+  }
+}
+
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${prefix}-env'
   location: location
