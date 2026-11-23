@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { formatChips } from '../src/components/Chips.jsx';
 import './GesturePanel.css';
 
@@ -112,51 +112,159 @@ export function GesturePreview({ gestures, children }) {
   );
 }
 
-/**
- * Gesture status for the table: camera preview with the hold ring, what to do next, the
- * gestures cheat sheet and an on/off switch. The buttons below always work as well.
- * showPreview false leaves out the preview, when my video tile already shows my camera and the
- * ring (GestureHold) is drawn on it instead.
- */
-export function GesturePanel({ gestures, myTurn, onToggle, error, showPreview = true }) {
-  const on = gestures.status !== 'off';
+// Line icons for the cheat sheet (20px, 2px stroke, like src/components/Icon.jsx).
+const GUIDE_ICONS = {
+  check: <path d="M9 4v9M15 4v9M4 19h16" />,
+  call: (
+    <>
+      <path d="M7 10v11" />
+      <path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.5l-2.3 7A2 2 0 0 1 17.5 21H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3l3.6-7a2.4 2.4 0 0 1 4.4 1.9Z" />
+    </>
+  ),
+  fold: (
+    <g transform="matrix(1 0 0 -1 0 24)">
+      <path d="M7 10v11" />
+      <path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.5l-2.3 7A2 2 0 0 1 17.5 21H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3l3.6-7a2.4 2.4 0 0 1 4.4 1.9Z" />
+    </g>
+  ),
+  raise: <path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" />,
+  allin: <path d="m4 7 5 5-5 5M11 7l5 5-5 5M20 6v12" />,
+};
+
+function GuideIcon({ action }) {
   return (
-    <section className="panel gesture-panel" aria-label="Gestures">
-      {gestures.status === 'on' && showPreview && <GesturePreview gestures={gestures} />}
-      <div className="gesture-panel__body">
-        <div className="gesture-panel__top">
-          <p className="gesture-panel__message" aria-live="polite">
-            {gestureMessage(gestures, { myTurn })}
-          </p>
-          <div className="row" style={{ gap: 'var(--space-2)' }}>
-            {gestures.status === 'error' && (
-              <button type="button" className="pill pill--sm" onClick={gestures.retry}>
-                Try again
-              </button>
-            )}
-            <button type="button" className="pill pill--sm" onClick={onToggle}>
-              {on ? 'Turn off gestures' : 'Turn on gestures'}
-            </button>
-          </div>
-        </div>
-        {gestures.status === 'on' && gestures.raising && (
-          <p className="gesture-panel__raise tabular">
-            Raise to <strong>{formatChips(gestures.raiseAmount)}</strong>
-          </p>
-        )}
-        {error && (
-          <p className="field__error" role="alert">
-            {error}
-          </p>
-        )}
-        {on && (
-          <ul className="gesture-panel__guide text-small muted">
-            {GESTURE_GUIDE.map(({ action, how }) => (
-              <li key={action}>
-                <strong>{ACTION_LABELS[action]}</strong> {how}
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {GUIDE_ICONS[action]}
+    </svg>
+  );
+}
+
+// The guide text without its trailing emoji: the card draws a line icon instead.
+const withoutEmoji = (text) => text.replace(/\s*\p{Extended_Pictographic}.*$/u, '');
+
+/** Short status next to the panel title. */
+function gestureStatus(gestures) {
+  if (gestures.status === 'off') return 'Off';
+  if (gestures.status === 'starting') return 'Starting…';
+  if (gestures.status === 'error') return 'Camera problem';
+  return gestures.hand ? 'Hand tracked' : 'Camera on';
+}
+
+/**
+ * Gesture card for the table's side column: status, what to do next, the gestures cheat sheet
+ * and an on/off switch. The buttons in the action bar always work as well.
+ * showPreview false leaves out the camera preview, when my video tile already shows my camera
+ * and the ring (GestureHold) is drawn on it instead.
+ * legal: the actions I can take right now (null when it is not my turn), to dim the others.
+ * toCall: the amount a call costs, shown on the Call row.
+ * guideOpen / onGuideToggle: fold the cheat sheet away (the table starts with it folded). Without
+ * onGuideToggle the cheat sheet is always shown.
+ */
+export function GesturePanel({
+  gestures,
+  myTurn,
+  onToggle,
+  error,
+  showPreview = true,
+  legal = null,
+  toCall = 0,
+  guideOpen = true,
+  onGuideToggle,
+}) {
+  const guideId = useId();
+  const showGuide = !onGuideToggle || guideOpen;
+  const on = gestures.status !== 'off';
+  const live = gestures.status === 'on';
+  return (
+    <section className="panel gesture-panel" aria-labelledby="gesture-panel-title">
+      <div className="gesture-panel__head">
+        <h2 id="gesture-panel-title" className="gesture-panel__title">
+          Gestures
+        </h2>
+        <span className={live ? 'status-dot' : 'status-dot gesture-panel__status--idle'}>
+          {gestureStatus(gestures)}
+        </span>
+      </div>
+
+      {live && showPreview && <GesturePreview gestures={gestures} />}
+
+      <p className="gesture-panel__message" aria-live="polite">
+        {gestureMessage(gestures, { myTurn })}
+      </p>
+      {live && gestures.raising && (
+        <p className="gesture-panel__raise tabular">
+          Raise to <strong>{formatChips(gestures.raiseAmount)}</strong>
+        </p>
+      )}
+      {error && (
+        <p className="field__error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {on && showGuide && (
+        <ul className="gesture-panel__guide" id={guideId}>
+          {GESTURE_GUIDE.map(({ action, how }) => {
+            const unavailable = legal !== null && !legal.includes(action);
+            const holding = live && gestures.action === action;
+            const classes = [
+              'gesture-panel__item',
+              holding && 'gesture-panel__item--holding',
+              unavailable && 'gesture-panel__item--unavailable',
+            ]
+              .filter(Boolean)
+              .join(' ');
+            let title = ACTION_LABELS[action];
+            if (action === 'call' && legal?.includes('call') && toCall > 0) {
+              title = `Call ${formatChips(toCall)}`;
+            }
+            return (
+              <li key={action} className={classes}>
+                <span className="gesture-panel__icon">
+                  <GuideIcon action={action} />
+                </span>
+                <span className="gesture-panel__text">
+                  <strong>
+                    {title}
+                    {unavailable && ' (not available now)'}
+                  </strong>
+                  <span>{withoutEmoji(how)}</span>
+                </span>
               </li>
-            ))}
-          </ul>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="row gesture-panel__actions">
+        {gestures.status === 'error' && (
+          <button type="button" className="pill pill--sm" onClick={gestures.retry}>
+            Try again
+          </button>
+        )}
+        <button type="button" className="pill pill--sm" onClick={onToggle}>
+          {on ? 'Turn off gestures' : 'Turn on gestures'}
+        </button>
+        {on && onGuideToggle && (
+          <button
+            type="button"
+            className="pill pill--sm gesture-panel__guide-toggle"
+            aria-expanded={guideOpen}
+            aria-controls={guideId}
+            onClick={onGuideToggle}
+          >
+            {guideOpen ? 'Hide guide' : 'Show all gestures'}
+          </button>
         )}
       </div>
     </section>

@@ -2,31 +2,29 @@
 
 .gesture-panel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-4);
-  width: min(100%, 860px);
-  margin: 0 auto;
-}
-
-.gesture-panel__body {
-  display: flex;
-  flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
-  min-width: 240px;
+  gap: var(--space-3);
 }
 
-.gesture-panel__top {
+.gesture-panel__head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-3);
+}
+
+.gesture-panel__title {
+  font-size: var(--text-section);
+  font-weight: 700;
+}
+
+.gesture-panel__status--idle {
+  color: var(--color-muted);
 }
 
 .gesture-panel__message {
-  font-weight: 700;
+  color: var(--color-muted);
+  font-size: var(--text-small);
 }
 
 .gesture-panel__raise strong {
@@ -34,12 +32,62 @@
 }
 
 .gesture-panel__guide {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-1) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.gesture-panel__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-input);
+  transition:
+    border-color var(--duration) var(--ease-out),
+    background-color var(--duration) var(--ease-out);
+}
+
+.gesture-panel__item--holding {
+  border-color: var(--color-lime);
+  background: var(--color-lime-soft);
+}
+
+.gesture-panel__item--unavailable {
+  opacity: 0.5;
+}
+
+.gesture-panel__icon {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-icon);
+  background: var(--color-surface-2);
+  color: var(--color-lime-text);
+}
+
+.gesture-panel__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--text-caption);
+  line-height: 1.35;
+  color: var(--color-muted);
+}
+
+.gesture-panel__text strong {
+  color: var(--color-ink);
+  font-size: var(--text-small);
+}
+
+.gesture-panel__actions {
+  gap: var(--space-2);
 }
 
 .gesture-preview {
@@ -114,4 +162,8 @@
   .gesture-preview {
     width: 100%;
   }
+}
+
+.gesture-panel__guide-toggle {
+  margin-left: auto;
 }

@@ -7,6 +7,7 @@ import {
   renderHook,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { TablePage } from '../src/pages/TablePage.jsx';
@@ -254,6 +255,8 @@ describe('TablePage', () => {
 
     expect(screen.getByText('Sofía wins')).toBeInTheDocument();
     expect(screen.getByText(/300 · Full house/)).toBeInTheDocument();
+    // The winner's seat says so too
+    expect(screen.getByText('Wins 300')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '9 of clubs' })).toBeInTheDocument();
   });
 
@@ -327,6 +330,55 @@ describe('TablePage', () => {
 
     fireEvent.click(button('Leave table'));
     expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument();
+  });
+
+  it('lists the gestures, dimming the ones I cannot use this turn', async () => {
+    mockServices();
+    await renderLive();
+
+    const panel = screen.getByRole('region', { name: 'Gestures' });
+    // Folded away at first
+    expect(within(panel).queryByText('Call 10')).toBeNull();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show all gestures' }));
+    expect(within(panel).getByRole('button', { name: 'Hide guide' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(within(panel).getByText('Call 10')).toBeInTheDocument();
+    expect(within(panel).getByText('Check (not available now)')).toBeInTheDocument();
+    expect(within(panel).getByText('Fold')).toBeInTheDocument();
+  });
+
+  it('folds the action buttons away and back', async () => {
+    mockServices();
+    await renderLive();
+
+    // Without a working camera in the test, gestures are not on, so the buttons start open.
+    expect(button('Call 10')).toBeInTheDocument();
+    fireEvent.click(button('Hide buttons'));
+    expect(screen.queryByRole('button', { name: 'Call 10' })).toBeNull();
+    expect(screen.getByText('Show a gesture to act')).toBeInTheDocument();
+    expect(screen.getByText(/^Your turn · 0:1\d$/)).toBeInTheDocument();
+    fireEvent.click(button('Show buttons'));
+    expect(button('Call 10')).toBeInTheDocument();
+  });
+
+  it('shows my chips in the top bar and the leaderboard beside the table', async () => {
+    mockServices({
+      'GET /leaderboard': () =>
+        json(200, [
+          { id: SOFIA, name: 'Sofía', chips: 1400 },
+          { id: ME, name: 'Alex', chips: 980 },
+        ]),
+    });
+    renderTable();
+
+    const board = await screen.findByRole('region', { name: 'Leaderboard' });
+    const rows = within(board).getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Sofía');
+    expect(rows[1]).toHaveTextContent('You');
+    expect(rows[1]).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByText('play chips')).toBeInTheDocument();
   });
 });
 
@@ -470,9 +522,22 @@ describe('table helpers', () => {
   it('turns the seats so I sit at the bottom', () => {
     const spots = arrangeSeats(seats, 6, 'me');
     expect(spots[0].seat.playerId).toBe('me');
-    expect(spots[4].seat.playerId).toBe('a');
+    // The others fill in from my left; the empty seats come last
+    expect(spots[1].seat.playerId).toBe('a');
     expect(spots.filter((s) => s.seat === null)).toHaveLength(4);
+    expect(spots[5].seat).toBeNull();
     expect(arrangeSeats(seats, 6, 'nobody')[1].seat.playerId).toBe('a');
+  });
+
+  it('keeps the clockwise order of the players after me', () => {
+    const full = [
+      { seat: 0, playerId: 'host' },
+      { seat: 2, playerId: 'me' },
+      { seat: 4, playerId: 'b' },
+      { seat: 5, playerId: 'c' },
+    ];
+    const ids = arrangeSeats(full, 6, 'me').map((s) => s.seat?.playerId ?? null);
+    expect(ids).toEqual(['me', 'b', 'c', 'host', null, null]);
   });
 
   it('keeps pot raises within the limits', () => {
