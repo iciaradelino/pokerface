@@ -24,9 +24,10 @@ function useSecondsLeft(timerEndsAt) {
 }
 
 /**
- * The fallback buttons and raise slider. They are always there, so you can play without
- * gestures. Remounted (via `key`) on every new turn, so the raise amount starts at the minimum.
- * Gestures (Ali) send the same actions through gameApi.act.
+ * The fallback buttons and raise slider, so you can play without gestures. They fold away
+ * (open / onToggle, kept by the table page) to make gestures the main way to play; the turn and
+ * the clock stay visible either way. Remounted (via `key`) on every new turn, so the raise amount
+ * starts at the minimum. Gestures (Ali) send the same actions through gameApi.act.
  */
 export function ActionBar({
   code,
@@ -37,8 +38,11 @@ export function ActionBar({
   bigBlind,
   waitingFor,
   onPlayerGone,
+  open = true,
+  onToggle,
 }) {
   const sliderId = useId();
+  const buttonsId = useId();
   const legal = new Set(mine?.legalActions ?? []);
   const myTurn = legal.size > 0 && state?.currentPlayer === playerId;
   const me = state?.seats.find((seat) => seat.playerId === playerId);
@@ -97,89 +101,107 @@ export function ActionBar({
             {heading}
           </p>
           <p className="text-small muted">
-            {myTurn ? 'Gesture or tap a button' : 'Your buttons light up on your turn'}
+            {!myTurn && 'Your buttons light up on your turn'}
+            {myTurn && (open ? 'Gesture or tap a button' : 'Show a gesture to act')}
           </p>
         </div>
 
-        <div className="action-bar__raise">
-          <div className="row" style={{ gap: 'var(--space-2)' }}>
-            {QUICK_RAISES.map(({ label, fraction }) => {
-              const amount = limits ? potRaise(fraction, limits) : null;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  className="pill pill--sm"
-                  aria-pressed={amount !== null && amount === raiseTo}
-                  disabled={!canRaise || sending}
-                  onClick={() => setRaiseTo(amount)}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="action-bar__slider">
-            <label className="text-small muted" htmlFor={sliderId}>
-              Raise to
-            </label>
-            <input
-              id={sliderId}
-              type="range"
-              className="range"
-              min={canRaise ? mine.minRaise : 0}
-              max={canRaise ? mine.maxRaise : 0}
-              step={Math.max(1, Math.min(bigBlind, canRaise ? mine.maxRaise - mine.minRaise : 1))}
-              value={canRaise ? raiseTo : 0}
-              disabled={!canRaise || sending}
-              onChange={(e) => setRaiseTo(Number(e.target.value))}
-            />
-          </div>
-        </div>
+        {onToggle && (
+          <button
+            type="button"
+            className="pill pill--sm action-bar__toggle"
+            aria-expanded={open}
+            aria-controls={buttonsId}
+            onClick={onToggle}
+          >
+            {open ? 'Hide buttons' : 'Show buttons'}
+            <Chevron up={open} />
+          </button>
+        )}
       </div>
 
-      <div className="action-bar__buttons">
-        <Button
-          variant="outline"
-          size="primary"
-          disabled={disabled('fold')}
-          onClick={() => send('fold')}
-        >
-          Fold
-        </Button>
-        <Button
-          variant="outline"
-          size="primary"
-          disabled={disabled('check')}
-          onClick={() => send('check')}
-        >
-          Check
-        </Button>
-        <Button
-          variant="call"
-          size="primary"
-          disabled={disabled('call')}
-          onClick={() => send('call')}
-        >
-          {myTurn && legal.has('call') ? `Call ${formatChips(mine.toCall)}` : 'Call'}
-        </Button>
-        <Button
-          variant="lime"
-          size="primary"
-          disabled={!canRaise || sending}
-          onClick={() => send('raise', raiseTo)}
-        >
-          {canRaise ? `Raise to ${formatChips(raiseTo)}` : 'Raise'}
-        </Button>
-        <Button
-          variant="outline"
-          size="primary"
-          disabled={disabled('allin')}
-          onClick={() => send('allin')}
-        >
-          All-in
-        </Button>
-      </div>
+      {open && (
+        <div className="action-bar__controls" id={buttonsId}>
+          <div className="action-bar__raise">
+            <div className="row" style={{ gap: 'var(--space-2)' }}>
+              {QUICK_RAISES.map(({ label, fraction }) => {
+                const amount = limits ? potRaise(fraction, limits) : null;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    className="pill pill--sm"
+                    aria-pressed={amount !== null && amount === raiseTo}
+                    disabled={!canRaise || sending}
+                    onClick={() => setRaiseTo(amount)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="action-bar__slider">
+              <label className="text-small muted" htmlFor={sliderId}>
+                Raise to
+              </label>
+              <input
+                id={sliderId}
+                type="range"
+                className="range"
+                min={canRaise ? mine.minRaise : 0}
+                max={canRaise ? mine.maxRaise : 0}
+                step={Math.max(1, Math.min(bigBlind, canRaise ? mine.maxRaise - mine.minRaise : 1))}
+                value={canRaise ? raiseTo : 0}
+                disabled={!canRaise || sending}
+                onChange={(e) => setRaiseTo(Number(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="action-bar__buttons">
+            <Button
+              variant="outline"
+              size="primary"
+              disabled={disabled('fold')}
+              onClick={() => send('fold')}
+            >
+              Fold
+            </Button>
+            <Button
+              variant="outline"
+              size="primary"
+              disabled={disabled('check')}
+              onClick={() => send('check')}
+            >
+              Check
+            </Button>
+            <Button
+              variant="call"
+              size="primary"
+              disabled={disabled('call')}
+              onClick={() => send('call')}
+            >
+              {myTurn && legal.has('call') ? `Call ${formatChips(mine.toCall)}` : 'Call'}
+            </Button>
+            <Button
+              variant="lime"
+              size="primary"
+              disabled={!canRaise || sending}
+              onClick={() => send('raise', raiseTo)}
+            >
+              {canRaise ? `Raise to ${formatChips(raiseTo)}` : 'Raise'}
+            </Button>
+            <Button
+              variant="outline"
+              size="primary"
+              disabled={disabled('allin')}
+              onClick={() => send('allin')}
+            >
+              All-in
+            </Button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="field__error" role="alert">
@@ -187,5 +209,23 @@ export function ActionBar({
         </p>
       )}
     </section>
+  );
+}
+
+function Chevron({ up }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={up ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
+    </svg>
   );
 }

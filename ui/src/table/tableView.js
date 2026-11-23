@@ -14,14 +14,28 @@ export const STAGE_LABELS = {
  * Puts every seat at a spot around the table, turned so that you sit at the bottom.
  * Returns maxSeats entries: { spot, seat } where spot 0 is the bottom centre and the others
  * go clockwise, and seat is the "state" seat (or null when it is empty).
+ *
+ * The other players fill the spots from your left, in the order they sit after you; empty seats
+ * go last. So everyone sees the others in the same clockwise order, and the spot next to you on
+ * the right (the last one) stays an empty seat to invite someone, until the table is full.
  */
 export function arrangeSeats(seats, maxSeats, myPlayerId) {
   const byIndex = new Map(seats.map((seat) => [seat.seat, seat]));
   const mine = seats.find((seat) => seat.playerId === myPlayerId);
-  const offset = mine ? mine.seat : 0;
+  if (!mine) {
+    return Array.from({ length: maxSeats }, (_, spot) => ({
+      spot,
+      seat: byIndex.get(spot) ?? null,
+    }));
+  }
+  const others = [];
+  for (let step = 1; step < maxSeats; step += 1) {
+    const seat = byIndex.get((mine.seat + step) % maxSeats);
+    if (seat) others.push(seat);
+  }
   return Array.from({ length: maxSeats }, (_, spot) => ({
     spot,
-    seat: byIndex.get((spot + offset) % maxSeats) ?? null,
+    seat: spot === 0 ? mine : (others[spot - 1] ?? null),
   }));
 }
 
