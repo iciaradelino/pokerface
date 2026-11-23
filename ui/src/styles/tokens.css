@@ -71,6 +71,9 @@
   --color-chip-edge: #ffd6e8;
   --color-dealer: #ffc93c;
   --color-on-dealer: #2a1e00;
+  --color-small-blind: #8fb3ff;
+  --color-big-blind: #c9a2ff;
+  --color-on-blind: #0f1a14;
   --color-call: #5b8cff;
   --color-on-call: #061433;
   --color-card-face: #ffffff;

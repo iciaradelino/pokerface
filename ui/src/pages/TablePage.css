@@ -1,8 +1,16 @@
+/*
+ * On a laptop or desktop the whole table fits the window with no scrolling: the top bar takes
+ * its height, and the felt shrinks to whatever is left above the action bar. Phones scroll.
+ */
 .table-page {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-/* ---------- Top bar: table info on the left, Leave table on the right ---------- */
+/* ---------- Top bar: table info on the left; chips, mic and Leave table on the right ---------- */
 
 .table-bar {
   display: flex;
@@ -11,7 +19,7 @@
   gap: var(--space-4);
   padding: var(--space-3) var(--space-8);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-bg);
 }
 
 .table-bar__info {
@@ -20,70 +28,269 @@
 }
 
 .table-bar__title {
-  margin-right: var(--space-2);
+  margin: 0 var(--space-1) 0 var(--space-3);
   font-weight: 700;
+  font-size: var(--text-body);
+}
+
+.table-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--text-small);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.table-bar__code {
+  color: var(--color-ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.table-bar__code:hover {
+  background: var(--color-surface-2);
+}
+
+.table-bar__me {
+  flex-wrap: nowrap;
+  gap: var(--space-3);
+}
+
+.table-bar__chips {
+  min-height: var(--height-secondary);
+  padding-left: var(--space-2);
+  color: var(--color-ink);
+  font-size: var(--text-body);
+}
+
+.table-bar__chips .muted {
   font-size: var(--text-small);
 }
 
+.table-bar__chip {
+  width: 26px;
+  height: 26px;
+  border: 3px dashed var(--color-chip-edge);
+  border-radius: 50%;
+  background: var(--color-chip);
+  box-shadow: 0 0 0 2px var(--color-chip);
+}
+
+.table-bar__icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: var(--height-secondary);
+  height: var(--height-secondary);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.table-bar__icon-btn:hover {
+  background: var(--color-surface-2);
+}
+
+.table-bar__icon-btn[aria-pressed='true'] {
+  border-color: var(--color-negative);
+  color: var(--color-negative);
+}
+
+/* ---------- Page: the table and action bar, with gestures and leaderboard beside them ---------- */
+
 .table-page__main {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-6);
+  width: 100%;
+  min-height: 0;
+  max-width: 2200px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-8) var(--space-5);
+}
+
+.table-page__play {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Scrolls on its own if the gestures guide is open on a short screen; the page never does */
+.table-page__side {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: var(--content-max-table);
-  margin: 0 auto;
-  padding: var(--space-4) var(--space-8) var(--space-10);
+  min-height: 0;
+  overflow-y: auto;
 }
 
-/* ---------- The felt ---------- */
+.table-page__side .panel {
+  padding: var(--space-5);
+}
 
-/* Room around the oval for the seats that sit on its edge */
+/* ---------- Leaderboard in the side column ---------- */
+
+.table-board__title {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-section);
+}
+
+.table-board__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.table-board__row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: 600;
+}
+
+.table-board__rank {
+  color: var(--color-muted);
+}
+
+.table-board__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-board__row--me .table-board__name,
+.table-board__row--me .table-board__chips {
+  color: var(--color-lime-text);
+}
+
+/* ---------- The table area: the oval felt, with the seats around its rim ---------- */
+
+/* Takes the height the action bar leaves (cq units below are this box's size). */
 .felt-wrap {
-  padding: 60px 90px 96px;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: var(--space-2) 0 var(--space-5);
+  container-type: size;
 }
 
+/*
+ * The whole table area: as big as fits, between 2:1 and 1.45:1. Seats, bets and the board are
+ * placed in % of it. The green oval (.felt__table) sits inside with a margin, so the camera
+ * tiles surround it instead of covering it.
+ */
 .felt {
+  /* Tile widths, in % of the table area */
+  --seat-w: 20%;
+  --me-w: 22%;
+  --felt-w: min(100cqw, 100cqh * 2);
   position: relative;
-  aspect-ratio: 2.1 / 1;
-  /* Small enough that the action bar stays on screen on a laptop */
-  max-width: min(900px, (100vh - 360px) * 2.1);
-  min-width: 0;
-  margin: 0 auto;
-  border: 18px solid var(--color-table-edge);
+  width: var(--felt-w);
+  height: min(100cqh, var(--felt-w) / 1.45);
+  container-type: inline-size;
+}
+
+.felt--players-4 {
+  --seat-w: 18%;
+  --me-w: 20%;
+}
+
+.felt--players-5,
+.felt--players-6 {
+  --seat-w: 16%;
+  --me-w: 18%;
+}
+
+.felt__table {
+  position: absolute;
+  inset: 17% 11% 21%;
+  border: 22px solid var(--color-table-edge);
   border-radius: 999px;
   background: radial-gradient(
     ellipse at center,
-    var(--color-teal-line) -40%,
-    var(--color-teal) 60%
+    color-mix(in srgb, var(--color-teal) 85%, white) 0%,
+    var(--color-teal) 70%
   );
-  box-shadow: var(--shadow-table);
+  box-shadow:
+    0 0 0 2px var(--color-border),
+    0 30px 80px rgba(11, 125, 112, 0.25);
+}
+
+/* The thin line inside the rail */
+.felt__table::before {
+  content: '';
+  position: absolute;
+  inset: 6% 4%;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
 }
 
 .felt__brand {
   position: absolute;
-  top: 16%;
+  top: 30%;
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--font-display);
-  font-size: var(--text-small);
-  font-weight: 800;
-  letter-spacing: 0.3em;
-  color: rgba(255, 255, 255, 0.18);
+  font-size: var(--text-body);
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  color: rgba(255, 255, 255, 0.22);
 }
 
+/* Pot and board in the middle of the oval */
 .felt__centre {
   position: absolute;
-  top: 50%;
+  top: 49%;
   left: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-3);
-  transform: translate(-50%, -58%);
+  transform: translate(-50%, -50%);
+  /* Above the seats, so the result and the board are never hidden by a tile */
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* Every bet, in one layer above everything else on the table */
+.felt__bets {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.felt__pot .chip-amount {
+  min-height: 36px;
+  padding-right: var(--space-4);
+  font-size: var(--text-body);
 }
 
 .felt__board {
   display: flex;
   gap: var(--space-2);
+}
+
+/* Board cards grow with the table (cqw: % of the table area's width) */
+.felt__board .playing-card {
+  --card-w: clamp(40px, 5.8cqw, 90px);
 }
 
 .felt__waiting {
@@ -96,11 +303,12 @@
 }
 
 .felt__result {
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: var(--text-body);
   border-radius: var(--radius-input);
   background: var(--color-dark-card);
   color: var(--color-on-dark);
-  font-size: var(--text-small);
   text-align: center;
 }
 
@@ -116,8 +324,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  width: 150px;
+  gap: var(--space-2);
+  /* % of the felt, so tiles grow and shrink with the table */
+  width: clamp(130px, var(--seat-w), 320px);
   transform: translate(-50%, -50%);
 }
 
@@ -129,7 +338,7 @@
   border: 3px solid var(--seat-colour);
   border-radius: var(--radius-tile);
   background: var(--color-tile-bg);
-  box-shadow: var(--shadow-panel);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
 }
 
 /* The picture fills the tile; its notice goes on top so it does not cover the name strip. */
@@ -143,17 +352,31 @@
 }
 
 .seat--me {
-  width: 170px;
+  width: clamp(140px, var(--me-w), 340px);
+}
+
+/* The tile plus things pinned to its corners */
+.seat__frame {
+  position: relative;
+  width: 100%;
+}
+
+/* Above the other seats, so nothing covers the dealer and blind coins */
+.seat--marked {
+  z-index: 3;
 }
 
 .seat--acting .seat__tile {
   box-shadow:
-    0 0 0 4px var(--color-lime),
-    0 0 24px rgba(184, 242, 58, 0.6);
+    0 0 0 5px color-mix(in srgb, var(--color-lime) 45%, transparent),
+    0 0 32px rgba(184, 242, 58, 0.45);
 }
 
+/* Folded: grey tile, so the players still in the hand stand out */
 .seat--folded .seat__tile {
-  opacity: 0.55;
+  /* Set on the tile, because the seat itself gets the player colour inline */
+  --seat-colour: #5c6862;
+  opacity: 0.8;
 }
 
 .seat__silhouette {
@@ -175,7 +398,7 @@
   padding: var(--space-1) var(--space-3);
   background: var(--color-name-strip);
   color: #ffffff;
-  font-size: var(--text-caption);
+  font-size: var(--text-small);
   font-weight: 700;
 }
 
@@ -185,17 +408,58 @@
   white-space: nowrap;
 }
 
-.seat__dealer {
+.seat__stack {
+  color: var(--seat-colour);
+}
+
+.seat--folded .seat__stack {
+  color: var(--color-on-dark-muted);
+}
+
+/* Face-down cards in the tile's corner */
+.seat__backs {
   position: absolute;
   top: var(--space-2);
   left: var(--space-2);
+  display: flex;
+  gap: 4px;
+}
+
+.seat__backs span {
+  width: 16px;
+  height: 22px;
+  border: 2px solid var(--color-card-back-edge);
+  border-radius: 4px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-card-back) 0 3px,
+    var(--color-card-back-stripe) 3px 6px
+  );
+}
+
+/* Dealer and blind coins in a row on the tile's top-right corner */
+.seat__markers {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  z-index: 3;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.seat__markers .dealer-button {
+  width: 32px;
+  height: 32px;
+  box-shadow:
+    0 0 0 3px var(--color-table-edge),
+    0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 .seat__note {
-  padding: 2px var(--space-2);
+  padding: 2px var(--space-3);
   border-radius: var(--radius-pill);
-  background: var(--color-dark-card);
-  color: var(--color-on-dark);
+  background: var(--color-on-dark);
+  color: #0f1a14;
   font-size: var(--text-caption);
   font-weight: 700;
   white-space: nowrap;
@@ -214,36 +478,76 @@
   z-index: 1;
 }
 
+/* My cards sit beside my tile, on the felt, so they never cover the board */
 .seat__cards--mine {
-  margin-bottom: calc(-1 * var(--space-8));
+  position: absolute;
+  right: calc(100% + var(--space-3));
+  bottom: 22%;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.seat__cards--mine .playing-card {
+  --card-w: clamp(44px, 6.5cqw, 64px);
+}
+
+/* The gesture being held: a small pill at the top of my tile, so my face stays visible */
+.seat__tile .gesture-hold {
+  inset: var(--space-2) auto auto var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-3) 3px 3px;
+  border-radius: var(--radius-pill);
+  background: rgba(8, 8, 14, 0.8);
+}
+
+.seat__tile .gesture-hold > * {
+  grid-area: auto;
+}
+
+.seat__tile .gesture-hold__label {
+  font-size: var(--text-caption);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.seat__tile .gesture-hold__label::after {
+  content: ' · Hold…';
+  color: var(--color-on-dark-muted);
+  font-weight: 600;
+}
+
+.seat__tile .gesture-ring__track,
+.seat__tile .gesture-ring__bar {
+  stroke-width: 3;
 }
 
 .seat__bet {
   position: absolute;
-  z-index: 1;
   transform: translate(-50%, -50%);
 }
 
 .seat--empty {
+  width: clamp(120px, 17%, 280px);
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   aspect-ratio: 4 / 3;
   border: 2px dashed var(--color-teal-line);
   border-radius: var(--radius-tile);
-  background: var(--color-surface);
-  opacity: 0.92;
+  background: color-mix(in srgb, var(--color-teal) 70%, black);
 }
 
 .seat__empty-title {
-  color: var(--color-ink);
+  color: var(--color-on-teal);
   font-size: var(--text-small);
   font-weight: 700;
 }
 
 .seat__invite {
-  min-height: var(--height-quick-bet);
-  padding: 0 var(--space-3);
-  font-size: var(--text-caption);
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  font-size: var(--text-small);
 }
 
 /* ---------- Action bar ---------- */
@@ -251,17 +555,35 @@
 .action-bar {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: var(--space-4);
-  width: min(100%, 860px);
-  margin: 0 auto;
+  padding: var(--space-4) var(--space-5);
 }
 
 .action-bar__top {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4) var(--space-8);
+  gap: var(--space-4);
+}
+
+.action-bar__toggle {
+  flex-shrink: 0;
+}
+
+/* Raise picker beside the buttons when there is room, under them when not */
+.action-bar__controls {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+}
+
+.action-bar__status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .action-bar__heading {
@@ -276,7 +598,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--color-positive);
+  color: var(--color-lime-text);
 }
 
 .action-bar__heading--turn::before {
@@ -292,7 +614,13 @@
   flex: 1;
   flex-direction: column;
   gap: var(--space-2);
-  min-width: 260px;
+  min-width: 240px;
+}
+
+.action-bar__raise .pill[aria-pressed='true'] {
+  border-color: var(--color-lime);
+  background: var(--color-lime);
+  color: var(--color-on-lime);
 }
 
 .action-bar__raise .pill:disabled {
@@ -317,31 +645,61 @@
 }
 
 .action-bar__buttons .btn {
-  min-width: 110px;
+  min-width: 104px;
+  min-height: 48px;
+  font-size: var(--text-body-lg);
+}
+
+.action-bar__buttons .btn--outline {
+  background: transparent;
 }
 
 /* ---------- Smaller screens ---------- */
 
-@media (max-width: 1100px) {
-  .seat {
-    width: 120px;
+@media (max-width: 1280px) {
+  .table-page__main {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    padding-inline: var(--space-5);
+  }
+}
+
+/* No room for the side column: the page scrolls, with leaderboard and gestures underneath */
+@media (max-width: 960px) {
+  .table-page {
+    height: auto;
+    overflow: visible;
   }
 
-  .seat--me {
-    width: 140px;
+  .table-page__main {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .felt__board .playing-card {
-    --card-w: 44px;
+  .felt-wrap {
+    height: 62vw;
+  }
+
+  .table-page__side {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-items: start;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 900px) {
+  .table-bar__chips .muted {
+    display: none;
   }
 }
 
 @media (max-width: 760px) {
   .table-bar {
+    flex-wrap: wrap;
     padding: var(--space-3) var(--space-4);
   }
 
-  .table-bar__title {
+  .table-bar__title,
+  .table-bar__chips {
     display: none;
   }
 
@@ -350,13 +708,27 @@
   }
 
   .felt-wrap {
-    padding: 56px 34px 96px;
+    display: block;
+    height: auto;
+    padding: var(--space-2) 0 var(--space-6);
+    container-type: normal;
   }
 
+  /* Portrait on a phone */
   .felt {
-    aspect-ratio: 1 / 1.25;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1.4;
+  }
+
+  .felt__table {
+    inset: 12% 10% 16%;
     border-width: 12px;
     border-radius: 140px;
+  }
+
+  .felt__table::before {
+    border-radius: 120px;
   }
 
   .seat {
@@ -372,6 +744,15 @@
     font-size: 10px;
   }
 
+  .seat__backs {
+    display: none;
+  }
+
+  .seat__markers .dealer-button {
+    width: 24px;
+    height: 24px;
+  }
+
   /* No room for empty seats on a phone; the code is in the top bar */
   .seat--empty {
     display: none;
@@ -385,12 +766,90 @@
     --card-w: 36px;
   }
 
+  /* No room beside my tile on a phone: my cards go back above it, small */
+  .seat__cards--mine {
+    position: static;
+    margin-bottom: calc(-1 * var(--space-6));
+  }
+
   .seat__cards--mine .playing-card {
-    --card-w: 52px;
+    --card-w: 40px;
+  }
+
+  .action-bar__status {
+    width: auto;
   }
 
   .action-bar__buttons .btn {
     flex: 1 1 calc(50% - var(--space-3));
     min-width: 0;
   }
+}
+
+/* ---------- Animations (switched off by prefers-reduced-motion in base.css) ---------- */
+
+/* A card slides onto the felt as it is dealt; the flop's three cards follow each other */
+.deal-in {
+  animation: deal-in 420ms var(--ease-out) both;
+}
+
+.felt__board .deal-in:nth-child(2),
+.seat__cards .deal-in:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.felt__board .deal-in:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes deal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-40px) rotate(-8deg) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The winner: the result pops up on the felt, and the winning tile glows */
+.felt__result {
+  animation: result-pop 520ms var(--ease-out) both;
+}
+
+@keyframes result-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.seat--winner .seat__tile {
+  --seat-colour: var(--color-lime);
+  animation: winner-glow 1.2s ease-in-out 3;
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--color-lime) 55%, transparent),
+    0 0 40px rgba(184, 242, 58, 0.6);
+}
+
+@keyframes winner-glow {
+  50% {
+    box-shadow:
+      0 0 0 10px color-mix(in srgb, var(--color-lime) 30%, transparent),
+      0 0 64px rgba(184, 242, 58, 0.8);
+  }
+}
+
+.seat__note--winner {
+  background: var(--color-lime);
+  color: var(--color-on-lime);
+  animation: result-pop 520ms var(--ease-out) both;
 }

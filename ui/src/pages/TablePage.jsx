@@ -2,14 +2,21 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { gameApi } from '../api/gameApi.js';
 import { ApiError } from '../api/http.js';
+import { playersApi } from '../api/playersApi.js';
 import { playerColour } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
-import { ChipAmount, DealerButton, formatChips } from '../components/Chips.jsx';
+import { BlindButton, ChipAmount, DealerButton, formatChips } from '../components/Chips.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { CardSlot, PlayingCard } from '../components/PlayingCard.jsx';
 import { normalizeCode } from '../tableCode.js';
 import { ActionBar } from '../table/ActionBar.jsx';
-import { STAGE_LABELS, arrangeSeats, potTotal, seatNote } from '../table/tableView.js';
+import {
+  STAGE_LABELS,
+  arrangeSeats,
+  blindPlayers,
+  potTotal,
+  seatNote,
+} from '../table/tableView.js';
 import { useTableSocket } from '../table/useTableSocket.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import { turnFrom } from '../../gestures/detector.js';
@@ -20,16 +27,29 @@ import { VideoTile } from '../../video/VideoTile.jsx';
 import { useVideo } from '../../video/useVideo.js';
 import './TablePage.css';
 
-// Where each spot sits on the felt, in % of the table (x, y). Spot 0 is you, at the bottom;
-// the rest go clockwise. Fewer seats use fewer, evenly spread spots.
-const B = [50, 100];
+// Where each spot sits, in % of the table area (x, y): `at` is the middle of the camera tile,
+// on the rim of the oval so the tiles surround the felt; `bet` is where that seat's chips go,
+// on the felt in front of it and clear of the board. Spot 0 is you, at the bottom; the rest go
+// clockwise. Fewer seats use fewer, evenly spread spots.
+const ME_SPOT = { at: [50, 84], bet: [35, 66] };
+const LEFT = { at: [9, 50], bet: [26, 50] };
+const RIGHT = { at: [91, 50], bet: [74, 50] };
 const SPOTS = {
-  2: [B, [50, 0]],
-  3: [B, [22, 4], [78, 4]],
-  4: [B, [5, 50], [50, 0], [95, 50]],
-  5: [B, [5, 55], [28, 0], [72, 0], [95, 55]],
-  6: [B, [5, 55], [28, 0], [72, 0], [95, 55], [78, 100]],
+  2: [ME_SPOT, { at: [50, 14], bet: [50, 31] }],
+  3: [ME_SPOT, { at: [28, 14], bet: [37, 31] }, { at: [72, 14], bet: [63, 31] }],
+  4: [ME_SPOT, LEFT, { at: [50, 14], bet: [50, 31] }, RIGHT],
+  5: [ME_SPOT, LEFT, { at: [30, 14], bet: [39, 31] }, { at: [70, 14], bet: [61, 31] }, RIGHT],
+  6: [
+    ME_SPOT,
+    LEFT,
+    { at: [30, 14], bet: [39, 31] },
+    { at: [70, 14], bet: [61, 31] },
+    RIGHT,
+    { at: [80, 84], bet: [69, 66] },
+  ],
 };
+
+const spotsFor = (maxSeats) => SPOTS[maxSeats] ?? SPOTS[6];
 
 /** The seats from GET /tables/:id in the shape of a "state" message, until the socket sends one. */
 function stateFromTable(table) {
@@ -96,6 +116,9 @@ export function TablePage() {
   // Gestures (ui/gestures/, Ali). On unless the profile turned them off, or the player switches
   // them off here. They send the same actions as the buttons, which always work too.
   const [gesturesChoice, setGesturesChoice] = useState(null);
+  // Whether the action buttons and the gestures guide are unfolded (null: not chosen yet).
+  const [buttonsChoice, setButtonsChoice] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [gestureSend, setGestureSend] = useState({ busy: false, error: null, turnKey: null });
   const myTurn = (mine?.legalActions?.length ?? 0) > 0 && live?.currentPlayer === playerId;
   const turnKey = `${live?.handNumber}-${live?.stage}-${live?.currentPlayer}-${mine?.minRaise}`;
@@ -144,25 +167,45 @@ export function TablePage() {
       ? `Hand #${state.handNumber} · ${STAGE_LABELS[stage]}`
       : 'No hand yet';
 
+  const inHand = !['waiting', 'complete'].includes(stage);
+  const blinds = inHand ? blindPlayers(state?.seats, state?.dealer) : {};
+  // The buttons start folded away while gestures work, to make gestures the way to play. With
+  // gestures off or no camera they start open, since they are the only way to act.
+  const buttonsOpen = buttonsChoice ?? !['on', 'starting'].includes(gestures.status);
+
   return (
     <div className="table-page">
       <header className="table-bar">
         <div className="row table-bar__info">
           <Logo />
           <span className="table-bar__title">Private table</span>
-          <span className="pill pill--quiet pill--sm">Code {code}</span>
+          <CopyCode code={code} />
           {table && (
-            <span className="pill pill--quiet pill--sm tabular">
+            <span className="table-bar__pill tabular">
               Blinds {formatChips(table.smallBlind)} / {formatChips(table.bigBlind)}
             </span>
           )}
-          <span className="pill pill--quiet pill--sm">{handLabel}</span>
+          <span className="table-bar__pill">{handLabel}</span>
         </div>
-        <div className="row">
+        <div className="row table-bar__me">
+          {player && (
+            <span className="table-bar__pill table-bar__chips tabular">
+              <span className="table-bar__chip" aria-hidden="true" />
+              <strong>{formatChips(player.chips)}</strong>
+              <span className="muted">play chips</span>
+            </span>
+          )}
           {video.hasMic && (
-            <Button variant="outline" onClick={video.toggleMic} aria-pressed={!video.micOn}>
-              {video.micOn ? 'Mute' : 'Unmute'}
-            </Button>
+            <button
+              type="button"
+              className="table-bar__icon-btn"
+              onClick={video.toggleMic}
+              aria-pressed={!video.micOn}
+              aria-label={video.micOn ? 'Mute' : 'Unmute'}
+              title={video.micOn ? 'Mute' : 'Unmute'}
+            >
+              <MicIcon off={!video.micOn} />
+            </button>
           )}
           <Button variant="outline" onClick={() => navigate('/lobby')}>
             Leave table
@@ -171,91 +214,135 @@ export function TablePage() {
       </header>
 
       <main className="table-page__main">
-        {connection !== 'open' && (
-          <div className="banner" role="status">
-            {connection === 'connecting'
-              ? 'Connecting to the table…'
-              : 'Connection lost. Reconnecting…'}
-          </div>
-        )}
+        <div className="table-page__play">
+          {connection !== 'open' && (
+            <div className="banner" role="status">
+              {connection === 'connecting'
+                ? 'Connecting to the table…'
+                : 'Connection lost. Reconnecting…'}
+            </div>
+          )}
 
-        <section className="felt-wrap" aria-label="Table">
-          <div className="felt">
-            <span className="felt__brand" aria-hidden="true">
-              POKERFACE
-            </span>
+          <section className="felt-wrap" aria-label="Table">
+            {/* Tiles are biggest with few players and shrink a little as the table fills */}
+            <div className={`felt felt--players-${Math.min(state?.seats.length ?? 0, 6)}`}>
+              {/* The green oval; the seats sit around its rim */}
+              <div className="felt__table" aria-hidden="true" />
+              <span className="felt__brand" aria-hidden="true">
+                POKERFACE
+              </span>
 
-            <div className="felt__centre">
-              {pot > 0 && (
-                <div className="felt__pot">
-                  <ChipAmount amount={pot} label="Pot" />
+              <div className="felt__centre">
+                {/* The winner goes on top, where no tile covers it */}
+                {state?.result && <Result result={state.result} nameOf={nameOf} me={playerId} />}
+                {pot > 0 && (
+                  <div className="felt__pot">
+                    <ChipAmount amount={pot} label="Pot" />
+                  </div>
+                )}
+                <div className="felt__board" aria-label="Board">
+                  {Array.from({ length: 5 }, (_, i) =>
+                    state?.board[i] ? (
+                      // Mounts when dealt, so the deal-in animation plays once per card
+                      <PlayingCard key={i} card={state.board[i]} size="md" className="deal-in" />
+                    ) : (
+                      <CardSlot key={i} size="md" />
+                    ),
+                  )}
                 </div>
-              )}
-              <div className="felt__board" aria-label="Board">
-                {Array.from({ length: 5 }, (_, i) =>
-                  state?.board[i] ? (
-                    <PlayingCard key={i} card={state.board[i]} size="md" />
-                  ) : (
-                    <CardSlot key={i} size="md" />
-                  ),
+                {stage === 'waiting' && (
+                  <p className="felt__waiting">
+                    {state && state.seats.length < 2
+                      ? 'Waiting for at least 2 players'
+                      : 'The next hand starts soon'}
+                  </p>
                 )}
               </div>
-              {state?.result && <Result result={state.result} nameOf={nameOf} me={playerId} />}
-              {stage === 'waiting' && (
-                <p className="felt__waiting">
-                  {state && state.seats.length < 2
-                    ? 'Waiting for at least 2 players'
-                    : 'The next hand starts soon'}
-                </p>
-              )}
+
+              {state &&
+                arrangeSeats(state.seats, maxSeats, playerId).map(({ spot, seat }) => (
+                  <SeatSpot
+                    key={spot}
+                    position={spotsFor(maxSeats)[spot].at}
+                    seat={seat}
+                    code={code}
+                    isMe={seat?.playerId === playerId}
+                    colour={seat?.playerId === playerId && player ? player.avatar : seat?.playerId}
+                    isDealer={seat !== null && seat.playerId === state.dealer}
+                    blind={
+                      (seat && seat.playerId === blinds.smallBlind && 'small') ||
+                      (seat && seat.playerId === blinds.bigBlind && 'big') ||
+                      null
+                    }
+                    won={winnings(state.result, seat?.playerId)}
+                    hasCards={inHand && (seat?.status === 'active' || seat?.status === 'allin')}
+                    note={
+                      seat
+                        ? seatNote(seat, {
+                            currentPlayer: state.currentPlayer,
+                            myPlayerId: playerId,
+                          })
+                        : ''
+                    }
+                    video={video}
+                    gestures={seat?.playerId === playerId && video.local ? gestures : null}
+                    holeCards={
+                      seat?.playerId === playerId
+                        ? mine?.holeCards
+                        : state.result?.revealed?.[seat?.playerId]
+                    }
+                  />
+                ))}
+
+              {/* Bets get their own layer on top of everything, so nothing ever covers a chip */}
+              <div className="felt__bets">
+                {state &&
+                  arrangeSeats(state.seats, maxSeats, playerId).map(({ spot, seat }) => {
+                    if (!seat || seat.bet <= 0) return null;
+                    const [x, y] = spotsFor(maxSeats)[spot].bet;
+                    return (
+                      <span
+                        key={spot}
+                        className="seat__bet"
+                        style={{ left: `${x}%`, top: `${y}%` }}
+                      >
+                        <ChipAmount amount={seat.bet} />
+                      </span>
+                    );
+                  })}
+              </div>
             </div>
+          </section>
 
-            {state &&
-              arrangeSeats(state.seats, maxSeats, playerId).map(({ spot, seat }) => (
-                <SeatSpot
-                  key={spot}
-                  position={(SPOTS[maxSeats] ?? SPOTS[6])[spot]}
-                  seat={seat}
-                  code={code}
-                  isMe={seat?.playerId === playerId}
-                  colour={seat?.playerId === playerId && player ? player.avatar : seat?.playerId}
-                  isDealer={seat !== null && seat.playerId === state.dealer}
-                  note={
-                    seat
-                      ? seatNote(seat, { currentPlayer: state.currentPlayer, myPlayerId: playerId })
-                      : ''
-                  }
-                  video={video}
-                  gestures={seat?.playerId === playerId && video.local ? gestures : null}
-                  holeCards={
-                    seat?.playerId === playerId
-                      ? mine?.holeCards
-                      : state.result?.revealed?.[seat?.playerId]
-                  }
-                />
-              ))}
-          </div>
-        </section>
+          <ActionBar
+            key={`${state?.handNumber}-${stage}-${state?.currentPlayer}-${mine?.minRaise}`}
+            code={code}
+            playerId={playerId}
+            state={state}
+            mine={mine}
+            pot={pot}
+            bigBlind={table?.bigBlind ?? 1}
+            waitingFor={state?.currentPlayer ? nameOf(state.currentPlayer) : null}
+            onPlayerGone={startOver}
+            open={buttonsOpen}
+            onToggle={() => setButtonsChoice(!buttonsOpen)}
+          />
+        </div>
 
-        <GesturePanel
-          gestures={gestures}
-          showPreview={!video.local}
-          myTurn={myTurn}
-          onToggle={() => setGesturesChoice(!gesturesEnabled)}
-          error={gestureSend.turnKey === turnKey ? gestureSend.error : null}
-        />
-
-        <ActionBar
-          key={`${state?.handNumber}-${stage}-${state?.currentPlayer}-${mine?.minRaise}`}
-          code={code}
-          playerId={playerId}
-          state={state}
-          mine={mine}
-          pot={pot}
-          bigBlind={table?.bigBlind ?? 1}
-          waitingFor={state?.currentPlayer ? nameOf(state.currentPlayer) : null}
-          onPlayerGone={startOver}
-        />
+        <aside className="table-page__side" aria-label="Leaderboard and gestures">
+          <TableLeaderboard playerId={playerId} />
+          <GesturePanel
+            gestures={gestures}
+            showPreview={!video.local}
+            myTurn={myTurn}
+            legal={myTurn ? mine.legalActions : null}
+            toCall={mine?.toCall ?? 0}
+            onToggle={() => setGesturesChoice(!gesturesEnabled)}
+            error={gestureSend.turnKey === turnKey ? gestureSend.error : null}
+            guideOpen={guideOpen}
+            onGuideToggle={() => setGuideOpen(!guideOpen)}
+          />
+        </aside>
       </main>
     </div>
   );
@@ -268,14 +355,15 @@ function SeatSpot({
   isMe,
   colour,
   isDealer,
+  blind,
+  won,
+  hasCards,
   note,
   holeCards,
   video,
   gestures,
 }) {
   const [x, y] = position;
-  // Bets sit between the seat and the middle of the table.
-  const betStyle = { left: `${x + (50 - x) * 0.42}%`, top: `${y + (50 - y) * 0.45}%` };
 
   if (!seat) {
     return (
@@ -291,6 +379,8 @@ function SeatSpot({
     isMe && 'seat--me',
     note === 'Your turn' || note === 'Thinking…' ? 'seat--acting' : '',
     seat.status === 'folded' && 'seat--folded',
+    (isDealer || blind) && 'seat--marked',
+    won > 0 && 'seat--winner',
   ]
     .filter(Boolean)
     .join(' ');
@@ -305,43 +395,61 @@ function SeatSpot({
         {holeCards?.length > 0 && (
           <div className={isMe ? 'seat__cards seat__cards--mine' : 'seat__cards'}>
             {holeCards.map((card) => (
-              <PlayingCard key={card} card={card} size={isMe ? 'lg' : 'sm'} />
+              <PlayingCard key={card} card={card} size={isMe ? 'lg' : 'sm'} className="deal-in" />
             ))}
           </div>
         )}
-        <div className="seat__tile">
-          <VideoTile
-            stream={isMe ? video.local : video.remotes[seat.playerId]?.stream}
-            isMe={isMe}
-            camera={video.camera}
-            state={video.remotes[seat.playerId]?.state}
-            onRetry={video.retry}
-          >
-            <svg className="seat__silhouette" viewBox="0 0 120 90" aria-hidden="true">
-              <circle cx="60" cy="34" r="16" />
-              <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
-            </svg>
-          </VideoTile>
-          {gestures?.status === 'on' && <GestureHold gestures={gestures} size={72} />}
-          <span className="seat__strip">
-            <span className="seat__name">{isMe ? 'You' : seat.name}</span>
-            <span className="tabular">{formatChips(seat.stack)}</span>
-          </span>
-          {isDealer && (
-            <span className="seat__dealer">
-              <DealerButton />
+        <div className="seat__frame">
+          <div className="seat__tile">
+            <VideoTile
+              stream={isMe ? video.local : video.remotes[seat.playerId]?.stream}
+              isMe={isMe}
+              camera={video.camera}
+              state={video.remotes[seat.playerId]?.state}
+              onRetry={video.retry}
+            >
+              <svg className="seat__silhouette" viewBox="0 0 120 90" aria-hidden="true">
+                <circle cx="60" cy="34" r="16" />
+                <path d="M26 90c0-20 15-32 34-32s34 12 34 32Z" />
+              </svg>
+            </VideoTile>
+            {gestures?.status === 'on' && <GestureHold gestures={gestures} size={24} />}
+            {/* Face-down cards in the corner of everyone else still in the hand */}
+            {!isMe && hasCards && !holeCards?.length && (
+              <span className="seat__backs" aria-hidden="true">
+                <span />
+                <span />
+              </span>
+            )}
+            <span className="seat__strip">
+              <span className="seat__name">{isMe ? 'You' : seat.name}</span>
+              <span className="seat__stack tabular">{formatChips(seat.stack)}</span>
+            </span>
+          </div>
+          {/* D, S and B coins on the tile's corner, above everything, so nothing covers them */}
+          {(isDealer || blind) && (
+            <span className="seat__markers">
+              {isDealer && <DealerButton />}
+              {blind && <BlindButton kind={blind} />}
             </span>
           )}
         </div>
-        {note && <span className="seat__note">{note}</span>}
+        {won > 0 ? (
+          <span className="seat__note seat__note--winner">Wins {formatChips(won)}</span>
+        ) : (
+          note && <span className="seat__note">{note}</span>
+        )}
       </div>
-      {seat.bet > 0 && (
-        <span className="seat__bet" style={betStyle}>
-          <ChipAmount amount={seat.bet} />
-        </span>
-      )}
     </>
   );
+}
+
+/** Chips a player won in the finished hand (0 when none, or no result yet). */
+function winnings(result, playerId) {
+  if (!result || !playerId) return 0;
+  return result.winners
+    .filter((winner) => winner.playerId === playerId)
+    .reduce((sum, winner) => sum + winner.amount, 0);
 }
 
 function Result({ result, nameOf, me }) {
@@ -374,6 +482,107 @@ function CopyInvite({ code }) {
     >
       {copied ? 'Link copied' : '+ Copy invite link'}
     </button>
+  );
+}
+
+/** "Code K7QX2M" in the top bar; a click copies the code. */
+function CopyCode({ code }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="table-bar__pill table-bar__code"
+      title={copied ? 'Code copied' : 'Copy the table code'}
+      onClick={() =>
+        navigator.clipboard
+          ?.writeText(code)
+          .then(() => setCopied(true))
+          .catch(() => {})
+      }
+    >
+      <span>Code {code}</span>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {copied ? (
+          <path d="m5 12 5 5 9-10" />
+        ) : (
+          <>
+            <rect x="8" y="8" width="12" height="12" rx="2.5" />
+            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+function MicIcon({ off }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+      {off && <path d="M4 4l16 16" />}
+    </svg>
+  );
+}
+
+/** Top players by chips, in the side column under the gestures. */
+function TableLeaderboard({ playerId }) {
+  const [rows, setRows] = useState(null); // null while loading, [] when unavailable or empty
+
+  useEffect(() => {
+    let active = true;
+    playersApi
+      .leaderboard()
+      .then((data) => active && setRows(data))
+      .catch(() => active && setRows([]));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!rows?.length) return null;
+  return (
+    <section className="panel table-board" aria-labelledby="table-board-title">
+      <h2 id="table-board-title" className="table-board__title">
+        Leaderboard
+      </h2>
+      <ol className="table-board__list">
+        {rows.slice(0, 5).map((row, index) => {
+          const isMe = row.id === playerId;
+          return (
+            <li
+              key={row.id}
+              className={isMe ? 'table-board__row table-board__row--me' : 'table-board__row'}
+              aria-current={isMe ? 'true' : undefined}
+            >
+              <span className="table-board__rank tabular">{index + 1}</span>
+              <span className="table-board__name">{isMe ? 'You' : row.name}</span>
+              <span className="table-board__chips tabular">{formatChips(row.chips)}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
