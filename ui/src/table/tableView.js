@@ -58,6 +58,19 @@ export function blindPlayers(seats = [], dealer) {
   return { smallBlind: inHand[small].playerId, bigBlind: inHand[big].playerId };
 }
 
+/**
+ * The bets a betting round just swept into the pot: when the same hand moves to its next stage
+ * (a new street, or the end of the hand), every bet on the table goes in. Returns
+ * [{ playerId, amount }] from the previous "state" message, or [] when nothing moved.
+ */
+export function sweptBets(previous, next) {
+  if (!previous || !next) return [];
+  if (previous.handNumber !== next.handNumber || previous.stage === next.stage) return [];
+  return previous.seats
+    .filter((seat) => seat.bet > 0)
+    .map((seat) => ({ playerId: seat.playerId, amount: seat.bet }));
+}
+
 /** Total chips in all pots. */
 export function potTotal(pots = []) {
   return pots.reduce((sum, pot) => sum + pot.amount, 0);

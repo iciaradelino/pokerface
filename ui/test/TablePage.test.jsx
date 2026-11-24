@@ -20,6 +20,7 @@ import {
   potRaise,
   secondsLeft,
   seatNote,
+  sweptBets,
 } from '../src/table/tableView.js';
 import { FakeSocket } from './fakeSocket.js';
 import { fakeStream } from './fakePeerConnection.js';
@@ -580,6 +581,27 @@ describe('table helpers', () => {
     expect(secondsLeft('nonsense')).toBeNull();
     expect(formatClock(14)).toBe('0:14');
     expect(formatClock(75)).toBe('1:15');
+  });
+
+  it('sweeps the bets into the pot when a round ends, and only then', () => {
+    const preflop = {
+      handNumber: 3,
+      stage: 'preflop',
+      seats: [
+        { playerId: 'a', bet: 10 },
+        { playerId: 'b', bet: 20 },
+        { playerId: 'c', bet: 0 },
+      ],
+    };
+    const flop = { handNumber: 3, stage: 'flop', seats: [] };
+    expect(sweptBets(preflop, flop)).toEqual([
+      { playerId: 'a', amount: 10 },
+      { playerId: 'b', amount: 20 },
+    ]);
+    // Same round (someone just acted), a new hand, or no earlier state: nothing slides
+    expect(sweptBets(preflop, { ...preflop })).toEqual([]);
+    expect(sweptBets(preflop, { ...flop, handNumber: 4 })).toEqual([]);
+    expect(sweptBets(null, flop)).toEqual([]);
   });
 
   it('labels seats', () => {

@@ -1,11 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { gameApi } from '../api/gameApi.js';
 import { ApiError } from '../api/http.js';
 import { playersApi } from '../api/playersApi.js';
 import { playerColour } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
-import { BlindButton, ChipAmount, DealerButton, formatChips } from '../components/Chips.jsx';
+import {
+  BlindButton,
+  Chip,
+  ChipAmount,
+  ChipStack,
+  DealerButton,
+  formatChips,
+} from '../components/Chips.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { CardSlot, PlayingCard } from '../components/PlayingCard.jsx';
 import { normalizeCode } from '../tableCode.js';
@@ -16,6 +23,7 @@ import {
   blindPlayers,
   potTotal,
   seatNote,
+  sweptBets,
 } from '../table/tableView.js';
 import { useTableSocket } from '../table/useTableSocket.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
@@ -119,6 +127,23 @@ export function TablePage() {
   // Whether the action buttons and the gestures guide are unfolded (null: not chosen yet).
   const [buttonsChoice, setButtonsChoice] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
+
+  // When a betting round ends, its bets slide from the seats into the pot. Worked out while
+  // rendering (React's "previous value" pattern), so the chips leave the seats in the same frame
+  // the new state takes them away.
+  const [previousLive, setPreviousLive] = useState(live);
+  const [sweep, setSweep] = useState(null); // { id, bets: [{ playerId, amount }] }
+  const [potLandings, setPotLandings] = useState(0); // counts sweeps, to replay the pot's drop-in
+  const potRef = useRef(null);
+  if (live !== previousLive) {
+    setPreviousLive(live);
+    const bets = sweptBets(previousLive, live);
+    if (bets.length) setSweep({ id: `${live.handNumber}-${live.stage}`, bets });
+  }
+  function endSweep() {
+    setSweep(null);
+    setPotLandings((n) => n + 1);
+  }
   const [gestureSend, setGestureSend] = useState({ busy: false, error: null, turnKey: null });
   const myTurn = (mine?.legalActions?.length ?? 0) > 0 && live?.currentPlayer === playerId;
   const turnKey = `${live?.handNumber}-${live?.stage}-${live?.currentPlayer}-${mine?.minRaise}`;
@@ -190,7 +215,7 @@ export function TablePage() {
         <div className="row table-bar__me">
           {player && (
             <span className="table-bar__pill table-bar__chips tabular">
-              <span className="table-bar__chip" aria-hidden="true" />
+              <Chip value={1000} size={26} />
               <strong>{formatChips(player.chips)}</strong>
               <span className="muted">play chips</span>
             </span>
@@ -236,8 +261,9 @@ export function TablePage() {
                 {/* The winner goes on top, where no tile covers it */}
                 {state?.result && <Result result={state.result} nameOf={nameOf} me={playerId} />}
                 {pot > 0 && (
-                  <div className="felt__pot">
-                    <ChipAmount amount={pot} label="Pot" />
+                  // Keyed by the sweeps, so the pot's chips drop in again as the bets land
+                  <div className="felt__pot" ref={potRef} key={potLandings}>
+                    <ChipAmount amount={pot} label="Pot" size={28} />
                   </div>
                 )}
                 <div className="felt__board" aria-label="Board">
@@ -308,6 +334,23 @@ export function TablePage() {
                       >
                         <ChipAmount amount={seat.bet} />
                       </span>
+                    );
+                  })}
+                {state &&
+                  sweep?.bets.map((bet, index) => {
+                    const placed = arrangeSeats(state.seats, maxSeats, playerId).find(
+                      ({ seat }) => seat?.playerId === bet.playerId,
+                    );
+                    if (!placed) return null;
+                    return (
+                      <SweptBet
+                        key={`${sweep.id}-${bet.playerId}`}
+                        from={spotsFor(maxSeats)[placed.spot].bet}
+                        amount={bet.amount}
+                        delay={index * 70}
+                        potRef={potRef}
+                        onDone={index === sweep.bets.length - 1 ? endSweep : undefined}
+                      />
                     );
                   })}
               </div>
@@ -441,6 +484,53 @@ function SeatSpot({
         )}
       </div>
     </>
+  );
+}
+
+const prefersLessMotion = () =>
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+/** A bet sliding from in front of its seat into the pot, then gone. */
+function SweptBet({ from, amount, delay, potRef, onDone }) {
+  const ref = useRef(null);
+  const [x, y] = from;
+
+  useLayoutEffect(() => {
+    const chips = ref.current;
+    const pot = potRef.current?.querySelector('.chip-stack') ?? potRef.current;
+    if (!chips?.animate || !pot || prefersLessMotion()) {
+      onDone?.();
+      return undefined;
+    }
+    const start = chips.getBoundingClientRect();
+    const end = pot.getBoundingClientRect();
+    const dx = end.left + end.width / 2 - (start.left + start.width / 2);
+    const dy = end.top + end.height / 2 - (start.top + start.height / 2);
+    const slide = chips.animate(
+      [
+        { transform: 'translate(-50%, -50%)', opacity: 1 },
+        {
+          transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`,
+          opacity: 1,
+          offset: 0.85,
+        },
+        {
+          transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.8)`,
+          opacity: 0,
+        },
+      ],
+      { duration: 600, delay, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' },
+    );
+    slide.onfinish = () => onDone?.();
+    return () => slide.cancel();
+    // Runs once: the chips fly from where they were to where the pot was when they left
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <span ref={ref} className="seat__bet seat__bet--swept" style={{ left: `${x}%`, top: `${y}%` }}>
+      <ChipStack amount={amount} />
+    </span>
   );
 }
 

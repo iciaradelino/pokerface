@@ -69,6 +69,16 @@
   --color-table-edge: #0f1a14;
   --color-chip: #ff5fa2;
   --color-chip-edge: #ffd6e8;
+  /* Real chips: one colour per value (1, 5, 25, 100, 500, 1K, 5K), with light edge stripes */
+  --chip-1: #f4f1e8;
+  --chip-5: #ff5fa2;
+  --chip-25: #b8f23a; /* lime, so it stands out on the teal felt */
+  --chip-100: #1b2620;
+  --chip-500: #c084fc;
+  --chip-1000: #ffb020;
+  --chip-5000: #5b8cff;
+  --chip-stripe: #ffffff;
+  --chip-stripe-on-light: #e0245e; /* stripes on the white 1 chip */
   --color-dealer: #ffc93c;
   --color-on-dealer: #2a1e00;
   --color-small-blind: #8fb3ff;

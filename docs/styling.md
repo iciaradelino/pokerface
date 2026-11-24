@@ -46,7 +46,8 @@ Headings use letter-spacing −0.03em. Small uppercase labels use +0.08em.
 | Element | Hex |
 |---|---|
 | Table edge | `#0F1A14` (dark mode `#050806`) |
-| Chips | `#FF5FA2`, dashed edge `#FFD6E8` |
+| Chips (brand mark, e.g. top bar of other pages) | `#FFD6E8` dashed edge on `#FF5FA2` |
+| Real chips on the table, by value | 1 `#F4F1E8` · 5 `#FF5FA2` · 25 `#B8F23A` · 100 `#1B2620` · 500 `#C084FC` · 1K `#FFB020` · 5K `#5B8CFF`, white edge stripes (red on the 1) |
 | Dealer button | `#FFC93C`, text `#2A1E00` |
 | Call button | `#5B8CFF`, text `#061433` |
 | Card face | `#FFFFFF` · red suits `#E0245E` · black suits `#0F1A14` |
@@ -74,7 +75,7 @@ Never write a hex value in a component. Every value above is a CSS variable, and
 | `ui/src/styles/tokens.css` | All colours, fonts, sizes, radii and shadows as variables, light and dark |
 | `ui/src/styles/base.css` | Reset, headings, `.label`, `.muted`, `.positive` / `.negative`, `.page` layout |
 | `ui/src/styles/components.css` | `.btn` + variants, `.pill`, `.input`, `.switch`, `.panel` (`--feature`, `--dark`, `--danger`), `.stat`, `.banner` |
-| `ui/src/components/` | `Button`, `PlayingCard` (takes engine cards like `"As"`), `Avatar` (initials + player colour), `ChipAmount`, `DealerButton` |
+| `ui/src/components/` | `Button`, `PlayingCard` (takes engine cards like `"As"`), `Avatar` (initials + player colour), `ChipAmount` (chip stacks + amount), `ChipStack`, `Chip`, `DealerButton` |
 
 Naming: `--color-<role>` (`--color-lime`, `--color-muted`), `--player-1` … `--player-6`, `--radius-<thing>`, `--height-<button>`, `--space-<n>` (4px steps), `--text-<size>`.
 

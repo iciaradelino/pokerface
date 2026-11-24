@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PlayingCard, parseCard } from '../src/components/PlayingCard.jsx';
 import { Avatar, colourIndex, initials, playerColour } from '../src/components/Avatar.jsx';
-import { formatChips, formatDelta } from '../src/components/Chips.jsx';
+import { ChipAmount, chipBreakdown, formatChips, formatDelta } from '../src/components/Chips.jsx';
 import { Button } from '../src/components/Button.jsx';
 
 describe('PlayingCard', () => {
@@ -56,6 +56,30 @@ describe('chip formatting', () => {
     expect(formatDelta(450)).toBe('+450');
     expect(formatDelta(-400)).toBe('−400');
     expect(formatDelta(0)).toBe('0');
+  });
+});
+
+describe('real chips', () => {
+  it('splits an amount into chips, biggest first', () => {
+    expect(chipBreakdown(1260)).toEqual([
+      { value: 1000, count: 1 },
+      { value: 100, count: 2 },
+      { value: 25, count: 2 },
+      { value: 5, count: 2 },
+    ]);
+    expect(chipBreakdown(0)).toEqual([]);
+  });
+
+  it('draws the three biggest piles, capped, and keeps the exact number as text', () => {
+    const { container } = render(<ChipAmount amount={1260} label="Pot" />);
+    expect(screen.getByText('Pot 1,260')).toBeInTheDocument();
+    const columns = container.querySelectorAll('.chip-stack__column');
+    expect(columns).toHaveLength(3);
+    expect(columns[0].querySelectorAll('.chip--v1000')).toHaveLength(1);
+    expect(columns[1].querySelectorAll('.chip--v100')).toHaveLength(2);
+    // 50,000 is ten 5K chips: the column stops at eight
+    const big = render(<ChipAmount amount={50000} />).container;
+    expect(big.querySelectorAll('.chip--v5000')).toHaveLength(8);
   });
 });
 

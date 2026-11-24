@@ -74,15 +74,6 @@
   font-size: var(--text-small);
 }
 
-.table-bar__chip {
-  width: 26px;
-  height: 26px;
-  border: 3px dashed var(--color-chip-edge);
-  border-radius: 50%;
-  background: var(--color-chip);
-  box-shadow: 0 0 0 2px var(--color-chip);
-}
-
 .table-bar__icon-btn {
   display: inline-grid;
   place-items: center;
@@ -277,9 +268,9 @@
   pointer-events: none;
 }
 
-.felt__pot .chip-amount {
-  min-height: 36px;
-  padding-right: var(--space-4);
+.felt__pot .chip-amount__text {
+  min-height: 32px;
+  padding: 0 var(--space-3);
   font-size: var(--text-body);
 }
 
@@ -526,6 +517,11 @@
 .seat__bet {
   position: absolute;
   transform: translate(-50%, -50%);
+}
+
+/* Chips on their way to the pot keep their stack still while they slide */
+.seat__bet--swept .chip {
+  animation: none;
 }
 
 .seat--empty {

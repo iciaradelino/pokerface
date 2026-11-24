@@ -1,23 +1,139 @@
+/* ---------- Real chips ---------- */
+
+/* Each value has its own colour; the stripes on the edge are white (red on the white 1 chip) */
+.chip--v1 {
+  --c: var(--chip-1);
+  --stripe: var(--chip-stripe-on-light);
+}
+.chip--v5 {
+  --c: var(--chip-5);
+}
+.chip--v25 {
+  --c: var(--chip-25);
+}
+.chip--v100 {
+  --c: var(--chip-100);
+}
+.chip--v500 {
+  --c: var(--chip-500);
+}
+.chip--v1000 {
+  --c: var(--chip-1000);
+}
+.chip--v5000 {
+  --c: var(--chip-5000);
+}
+
+.chip {
+  --stripe: var(--chip-stripe);
+  /* The face: plain middle, a thin inner ring, and striped edge spots around it */
+  --chip-face-bg:
+    radial-gradient(
+      closest-side,
+      transparent 0 54%,
+      color-mix(in srgb, var(--stripe) 70%, transparent) 55% 59%,
+      transparent 60%
+    ),
+    radial-gradient(closest-side, var(--c) 0 66%, transparent 67%),
+    repeating-conic-gradient(var(--c) 0 30deg, var(--stripe) 30deg 45deg);
+}
+
+/* Seen from above (the top bar) */
+.chip--flat {
+  display: inline-block;
+  flex: none;
+  width: var(--chip-w);
+  height: var(--chip-w);
+  border-radius: 50%;
+  background: var(--chip-face-bg);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--c) 70%, black),
+    0 2px 4px rgba(15, 26, 20, 0.3);
+}
+
+/* Columns of chips seen at an angle, side by side */
+.chip-stack {
+  --chip-face: calc(var(--chip-w) * 0.5); /* the top of a chip, squashed by the angle */
+  --chip-t: calc(var(--chip-w) * 0.17); /* how thick one chip is */
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4));
+}
+
+.chip-stack__column {
+  position: relative;
+  width: var(--chip-w);
+  height: calc(var(--chip-face) + var(--chip-t) * var(--count));
+}
+
+/* One chip in a column: the box is its striped side, ::before is its face on top */
+.chip-stack .chip {
+  position: absolute;
+  bottom: calc(var(--i) * var(--chip-t));
+  left: 0;
+  width: var(--chip-w);
+  height: calc(var(--chip-face) + var(--chip-t));
+  border-radius: calc(var(--chip-w) / 2) / calc(var(--chip-face) / 2);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.3),
+      transparent 30%,
+      rgba(255, 255, 255, 0.12) 50%,
+      transparent 70%,
+      rgba(0, 0, 0, 0.3)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--c) 82%, black) 0 calc(var(--chip-w) * 0.16),
+      var(--stripe) calc(var(--chip-w) * 0.16) calc(var(--chip-w) * 0.25)
+    );
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  animation: chip-drop 220ms ease-out both;
+  animation-delay: calc(var(--i) * 25ms);
+}
+
+.chip-stack .chip::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--chip-face);
+  border-radius: 50%;
+  background: var(--chip-face-bg);
+}
+
+@keyframes chip-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-stack .chip {
+    animation: none;
+  }
+}
+
+/* Chips with the amount beside them */
 .chip-amount {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-2);
-  min-height: 28px;
-  padding: 0 var(--space-3) 0 var(--space-1);
+}
+
+.chip-amount__text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--color-table-edge);
   color: #ffffff;
   font-size: var(--text-small);
   font-weight: 700;
-}
-
-.chip-amount__chip {
-  width: 20px;
-  height: 20px;
-  border: 2px dashed var(--color-chip-edge);
-  border-radius: 50%;
-  background: var(--color-chip);
-  box-shadow: 0 0 0 2px var(--color-chip);
+  white-space: nowrap;
 }
 
 .dealer-button {
