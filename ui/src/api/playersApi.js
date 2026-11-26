@@ -1,7 +1,7 @@
 // Players service (owner: Laura). Endpoints from plan.md §1 and §6.
 // Keep this in step with the service: if a path or body changes, change it here only.
 import { config } from '../config.js';
-import { request } from './http.js';
+import { request, waitForStartup } from './http.js';
 
 const players = (path, options) => request('players', config.playersUrl, path, options);
 
@@ -10,13 +10,17 @@ export const playersApi = {
    * body: { name, avatar, gestureSettings }. avatar is a hex colour such as "#B8F23A";
    * gestureSettings is a small JSON object. Returns { id, name, avatar, chips, gestureSettings }.
    */
-  create: (player) => players('/players', { method: 'POST', body: player }),
-  get: (id) => players(`/players/${encodeURIComponent(id)}`),
+  async create(player) {
+    await waitForStartup('players', config.playersUrl);
+    return players('/players', { method: 'POST', body: player });
+  },
+  get: (id) =>
+    players(`/players/${encodeURIComponent(id)}`, { timeoutMs: config.startupTimeoutMs }),
   update: (id, changes) =>
     players(`/players/${encodeURIComponent(id)}`, { method: 'PUT', body: changes }),
   remove: (id) => players(`/players/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   /** Returns { since, handsPlayed, recent: [{ handId, delta, playedAt }] }, newest hand first. */
   history: (id) => players(`/players/${encodeURIComponent(id)}/history`),
-  leaderboard: () => players('/leaderboard'),
+  leaderboard: () => players('/leaderboard', { timeoutMs: config.startupTimeoutMs }),
   health: () => players('/health'),
 };

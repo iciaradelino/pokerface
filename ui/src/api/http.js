@@ -24,6 +24,11 @@ export class ApiError extends Error {
 
 const SERVICE_NAMES = { players: 'Player service', game: 'Tables' };
 
+export function waitForStartup(service, baseUrl) {
+  if (config.startupTimeoutMs === undefined) return;
+  return request(service, baseUrl, '/health', { timeoutMs: config.startupTimeoutMs });
+}
+
 export async function request(
   service,
   baseUrl,
