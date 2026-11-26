@@ -10,4 +10,5 @@ export const config = {
   playersUrl: trimSlash(env.VITE_PLAYERS_URL || 'http://localhost:3001'),
   gameUrl: trimSlash(env.VITE_GAME_URL || 'http://localhost:3002'),
   requestTimeoutMs: 5000,
+  startupTimeoutMs: env.VITE_WAIT_FOR_STARTUP === 'true' ? 120_000 : undefined,
 };

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, request } from '../src/api/http.js';
 import { playersApi } from '../src/api/playersApi.js';
 import { gameApi } from '../src/api/gameApi.js';
+import { config } from '../src/config.js';
 
 function mockFetch(impl) {
   const fn = vi.fn(impl);
@@ -16,7 +17,11 @@ function jsonResponse(status, body) {
   });
 }
 
-afterEach(() => vi.unstubAllGlobals());
+const startupTimeoutMs = config.startupTimeoutMs;
+afterEach(() => {
+  config.startupTimeoutMs = startupTimeoutMs;
+  vi.unstubAllGlobals();
+});
 
 describe('request', () => {
   it('sends JSON and returns the parsed body', async () => {
@@ -98,5 +103,40 @@ describe('API paths', () => {
     await gameApi.join('a/b', 'p1');
     expect(fetch.mock.calls[0][0]).toBe('http://localhost:3002/tables/a%2Fb/join');
     expect(gameApi.socketUrl('t1', 'p 1')).toBe('ws://localhost:3002/tables/t1/ws?playerId=p%201');
+  });
+});
+
+describe('Azure startup', () => {
+  it('waits for both services before creating a table', async () => {
+    config.startupTimeoutMs = 120_000;
+    let ready;
+    const gameReady = new Promise((resolve) => {
+      ready = resolve;
+    });
+    const fetch = mockFetch(async (url, options) => {
+      if (url === 'http://localhost:3002/health') return gameReady;
+      if (url === 'http://localhost:3001/health') return jsonResponse(200, { status: 'ok' });
+      if (options.method === 'POST') return jsonResponse(201, { id: 'TABLE1' });
+      throw new Error('Unexpected request');
+    });
+
+    const table = gameApi.createTable('p1');
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:3002/health',
+      'http://localhost:3001/health',
+    ]);
+    ready(jsonResponse(200, { status: 'ok' }));
+    await expect(table).resolves.toEqual({ id: 'TABLE1' });
+    expect(fetch.mock.calls.filter(([, options]) => options.method === 'POST')).toHaveLength(1);
+  });
+
+  it('does not create a profile when the players service fails its startup check', async () => {
+    config.startupTimeoutMs = 120_000;
+    const fetch = mockFetch(async () => jsonResponse(503, { status: 'unavailable' }));
+
+    await expect(playersApi.create({ name: 'Ana' })).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('http://localhost:3001/health');
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
   });
 });

@@ -69,7 +69,7 @@ jobs:
         working-directory: ui
         run: |
           npm ci
-          VITE_PLAYERS_URL="$PLAYERS_BASE_URL" VITE_GAME_URL="$GAME_BASE_URL" npm run build
+          VITE_PLAYERS_URL="$PLAYERS_BASE_URL" VITE_GAME_URL="$GAME_BASE_URL" VITE_WAIT_FOR_STARTUP=true npm run build
       - name: Read the Static Web App upload token
         if: steps.release.outputs.current == 'true'
         id: ui

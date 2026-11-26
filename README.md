@@ -85,6 +85,8 @@ To enable the first deployment:
 
 The first successful deployment and live URL are tracked in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
 
+After a period of inactivity, Azure may need time to start the services and resume SQL. The live UI gives profile and leaderboard reads up to two minutes and checks service health before creating a profile or creating or joining a table. Table polling and in-game actions still use the five-second timeout.
+
 ### Monitoring
 
 After the Azure deployment, open **Pokerface monitoring** under Azure Monitor → Workbooks. It shows request count, 5xx rate, and average and p95 response times for both services over the last 24 hours.
