@@ -26,6 +26,7 @@ export const gameApi = {
    * this. Returns the table with paused: false. 403 for anyone but the creator.
    */
   startTable: (id, playerId) => game(`${table(id)}/start`, { method: 'POST', body: { playerId } }),
+  pauseTable: (id, playerId) => game(`${table(id)}/pause`, { method: 'POST', body: { playerId } }),
   /** Only the player who created the table may delete it. */
   deleteTable: (id, playerId) =>
     game(`${table(id)}?playerId=${encodeURIComponent(playerId)}`, { method: 'DELETE' }),

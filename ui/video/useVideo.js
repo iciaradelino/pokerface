@@ -29,9 +29,8 @@ export function cameraProblem(error) {
 /**
  * Video for one table.
  *   playerId   me
- *   peerIds    ids of everyone seated (mine is ignored)
- *   send       (toPlayerId, data) => void, sends a { type: "signal" } message
- *   onSignal   (listener) => unsubscribe; calls listener(from, data) for each incoming signal
+ *   send       (toPlayerId, data, toConnection) => void, relays a signal
+ *   onVideo    (listener) => unsubscribe; calls listener(message) with the roster and signals
  *
  * Returns { camera, local, remotes, retry, hasMic, micOn, toggleMic }:
  *   camera   "asking" | "on" | "denied" | "unavailable"
@@ -41,7 +40,7 @@ export function cameraProblem(error) {
  *   micOn    whether others can hear me; toggleMic() mutes and unmutes
  * Only the people at the table receive the video and sound, and it never goes through the server.
  */
-export function useVideo({ playerId, peerIds, send, onSignal }) {
+export function useVideo({ playerId, send, onVideo }) {
   const [camera, setCamera] = useState('asking');
   const [local, setLocal] = useState(null);
   const [remotes, setRemotes] = useState({});
@@ -49,7 +48,6 @@ export function useVideo({ playerId, peerIds, send, onSignal }) {
   const [micOn, setMicOn] = useState(true);
   const meshRef = useRef(null);
   const sendRef = useRef(send);
-  const peerKey = [...new Set(peerIds)].sort().join(',');
 
   useEffect(() => {
     sendRef.current = send;
@@ -59,22 +57,24 @@ export function useVideo({ playerId, peerIds, send, onSignal }) {
   useEffect(() => {
     const mesh = createMesh({
       selfId: playerId,
-      send: (to, data) => sendRef.current?.(to, data),
+      send: (...args) => sendRef.current?.(...args),
       onChange: () => setRemotes(mesh.remotes()),
     });
     meshRef.current = mesh;
-    const unsubscribe = onSignal((from, data) => mesh.handleSignal(from, data));
+    const unsubscribe = onVideo((message) => {
+      if (message.type === 'video-peers') {
+        mesh.setPeers(message.peers);
+      } else {
+        mesh.handleSignal(message.from, message.data);
+      }
+    });
     return () => {
       unsubscribe?.();
       mesh.close();
       meshRef.current = null;
       setRemotes({});
     };
-  }, [playerId, onSignal]);
-
-  useEffect(() => {
-    meshRef.current?.setPeers(peerKey ? peerKey.split(',') : []);
-  }, [peerKey, playerId, onSignal]);
+  }, [playerId, onVideo]);
 
   // My camera. Stopped when leaving, so the light goes off.
   useEffect(() => {
@@ -100,7 +100,7 @@ export function useVideo({ playerId, peerIds, send, onSignal }) {
       setLocal(null);
       meshRef.current?.setLocalStream(null);
     };
-  }, [attempt, playerId, onSignal]);
+  }, [attempt, playerId, onVideo]);
 
   const toggleMic = useCallback(() => {
     const next = !micOn;

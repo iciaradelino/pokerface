@@ -104,8 +104,8 @@ function renderTable() {
     <MemoryRouter initialEntries={['/tables/K7QX2M/play']}>
       <Routes>
         <Route path="/" element={<h1>Create your player</h1>} />
-        <Route path="/lobby" element={<h1>Lobby</h1>} />
-        <Route path="/tables/:code" element={<h1>Waiting room</h1>} />
+        <Route path="/menu" element={<h1>Main menu</h1>} />
+        <Route path="/tables/:code" element={<h1>Table lobby</h1>} />
         <Route path="/tables/:code/play" element={<TablePage />} />
       </Routes>
     </MemoryRouter>,
@@ -119,6 +119,10 @@ async function renderLive(state = stateMessage(), mine = privateMessage()) {
   const socket = FakeSocket.latest;
   socket.open();
   socket.push(state);
+  socket.push({
+    type: 'video-peers',
+    peers: Object.fromEntries(state.seats.map(({ playerId }, i) => [playerId, i + 1])),
+  });
   if (mine) socket.push(mine);
   return socket;
 }
@@ -264,6 +268,62 @@ describe('TablePage', () => {
     expect(screen.getByRole('img', { name: '9 of clubs' })).toBeInTheDocument();
   });
 
+  it.each([true, false])(
+    'returns to the same waiting room after the host pauses (host: %s)',
+    async (host) => {
+      const fetch = mockServices({
+        'GET /tables/K7QX2M': () => json(200, { ...TABLE, createdBy: host ? ME : SOFIA }),
+        'POST /tables/K7QX2M/pause': () => json(200, { ...TABLE, paused: true }),
+      });
+      const seats = stateMessage().seats.map((seat, i) => ({ ...seat, stack: i ? 0 : 2000 }));
+      const state = stateMessage({ stage: 'complete', currentPlayer: null, paused: false, seats });
+      const socket = await renderLive(state, null);
+      expect(screen.getByRole('heading', { name: 'Not enough players with chips' })).toBeVisible();
+      if (host) {
+        fireEvent.click(button('Back to table lobby'));
+        await waitFor(() => {
+          const call = fetch.mock.calls.find(([url]) => url.endsWith('/tables/K7QX2M/pause'));
+          expect(JSON.parse(call[1].body)).toEqual({ playerId: ME });
+        });
+      } else {
+        expect(screen.queryByRole('button', { name: 'Back to table lobby' })).toBeNull();
+      }
+      socket.push({ ...state, paused: true });
+      expect(await screen.findByRole('heading', { name: 'Table lobby' })).toBeVisible();
+    },
+  );
+
+  it.each([true, false])(
+    'finishes the active hand before returning to the lobby (host: %s)',
+    async (host) => {
+      const fetch = mockServices({
+        'GET /tables/K7QX2M': () => json(200, { ...TABLE, createdBy: host ? ME : SOFIA }),
+        'POST /tables/K7QX2M/pause': () => json(200, { ...TABLE, paused: true }),
+      });
+      const state = stateMessage({ paused: false });
+      const socket = await renderLive(state);
+      if (host) {
+        fireEvent.click(button('Back to table lobby'));
+        await waitFor(() => {
+          const call = fetch.mock.calls.find(([url]) => url.endsWith('/tables/K7QX2M/pause'));
+          expect(JSON.parse(call[1].body)).toEqual({ playerId: ME });
+        });
+      } else {
+        expect(screen.queryByRole('button', { name: 'Back to table lobby' })).toBeNull();
+      }
+
+      socket.push({ ...state, paused: true });
+      expect(
+        screen.getByText('Everyone will return to the table lobby after this hand.'),
+      ).toHaveAttribute('role', 'status');
+      expect(button('Call 10')).toBeEnabled();
+      expect(screen.queryByRole('heading', { name: 'Table lobby' })).toBeNull();
+
+      socket.push({ ...state, stage: 'complete', paused: true, currentPlayer: null });
+      expect(await screen.findByRole('heading', { name: 'Table lobby' })).toBeVisible();
+    },
+  );
+
   it('says when the connection drops and opens a new one', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockServices();
@@ -316,7 +376,7 @@ describe('TablePage', () => {
     mockServices({ 'GET /tables/K7QX2M': () => json(200, { ...TABLE, seats: [TABLE.seats[1]] }) });
     renderTable();
 
-    expect(await screen.findByRole('heading', { name: 'Waiting room' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Table lobby' })).toBeInTheDocument();
   });
 
   it('explains a table that does not exist', async () => {
@@ -333,7 +393,7 @@ describe('TablePage', () => {
     renderTable();
 
     fireEvent.click(button('Leave table'));
-    expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Main menu' })).toBeInTheDocument();
   });
 
   it('lists the gestures, dimming the ones I cannot use this turn', async () => {
@@ -431,6 +491,7 @@ describe('TablePage video', () => {
     socket.push({
       type: 'signal',
       from: EARLY,
+      fromConnection: 2,
       to: ME,
       data: { description: { type: 'offer', sdp: '' } },
     });
@@ -486,34 +547,31 @@ describe('useTableSocket signals', () => {
   const hook = (code = 'K7QX2M') =>
     renderHook(({ table }) => useTableSocket(table, ME), { initialProps: { table: code } });
 
-  it('sends the signals made before the socket opened, once it opens', () => {
+  it('starts signaling after admission and drops signals for an outdated socket', () => {
     const { result } = hook();
-    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
     const socket = FakeSocket.latest;
-    expect(socket.sent).toEqual([]);
     socket.open();
-    expect(socket.sent).toEqual([
-      { type: 'signal', to: SOFIA, data: { candidate: { candidate: 'c' } } },
-    ]);
+    const data = { candidate: { candidate: 'c' } };
+    act(() => result.current.send(SOFIA, data, 2));
+    expect(socket.sent).toEqual([]);
+    socket.push({ type: 'video-peers', peers: { [ME]: 1, [SOFIA]: 2 } });
+    act(() => result.current.send(SOFIA, data, 2));
+    socket.push({ type: 'video-peers', peers: { [ME]: 1, [SOFIA]: 3 } });
+    act(() => result.current.send(SOFIA, data, 2));
+    expect(socket.sent).toEqual([{ type: 'signal', to: SOFIA, toConnection: 2, data }]);
   });
 
-  it('forgets the queued signals when the socket closes for good', () => {
+  it('clears the video roster on disconnect and ignores late messages from that socket', () => {
     const { result } = hook();
-    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
-    FakeSocket.latest.drop(4404);
+    const listener = vi.fn();
+    result.current.onVideo(listener);
+    const socket = FakeSocket.latest;
+    socket.push({ type: 'video-peers', peers: { [ME]: 1, [SOFIA]: 2 } });
+    socket.drop(4404);
     expect(result.current.connection).toBe('closed');
-    // Whatever opens next (here a fake socket of the same hook) gets none of them.
-    FakeSocket.latest.open();
-    expect(FakeSocket.latest.sent).toEqual([]);
-  });
-
-  it('does not carry queued signals over to another table', () => {
-    const { result, rerender } = hook('K7QX2M');
-    act(() => result.current.send(SOFIA, { candidate: { candidate: 'c' } }));
-    rerender({ table: 'ABC234' });
-    FakeSocket.latest.open();
-    expect(FakeSocket.latest.url).toContain('/tables/ABC234/');
-    expect(FakeSocket.latest.sent).toEqual([]);
+    expect(listener).toHaveBeenLastCalledWith({ type: 'video-peers', peers: {} });
+    socket.push({ type: 'signal', from: SOFIA, fromConnection: 2, data: {} });
+    expect(listener).toHaveBeenLastCalledWith({ type: 'video-peers', peers: {} });
   });
 });
 

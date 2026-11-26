@@ -119,10 +119,10 @@ function publicResult(result) {
  * except the ones revealed at showdown (in `result.revealed`).
  *
  * @param {object} table engine table
- * @param {{ timerEndsAt?: string | null }} [options] when the current turn times out (ISO time),
+ * @param {{ timerEndsAt?: string | null, paused?: boolean }} [options] when the current turn times out (ISO time),
  *   set by the game service's turn timer
  */
-export function publicState(table, { timerEndsAt = null } = {}) {
+export function publicState(table, { timerEndsAt = null, paused } = {}) {
   const hand = table.hand;
   const live = isHandInProgress(table);
   const handPlayers = new Map((hand?.players ?? []).map((p) => [p.id, p]));
@@ -136,6 +136,7 @@ export function publicState(table, { timerEndsAt = null } = {}) {
 
   return {
     type: 'state',
+    paused,
     handNumber: table.handNumber,
     stage: hand === null ? 'waiting' : hand.phase,
     board: hand === null ? [] : [...hand.board],

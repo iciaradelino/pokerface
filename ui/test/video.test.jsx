@@ -16,24 +16,28 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 /** A signal source the test can push into, like the game service WebSocket. */
-function signalSource() {
+function signalSource(peers) {
   const listeners = new Set();
   return {
-    onSignal: (listener) => {
+    onVideo: (listener) => {
       listeners.add(listener);
+      listener({ type: 'video-peers', peers });
       return () => listeners.delete(listener);
     },
-    push: (from, data) => act(() => listeners.forEach((listener) => listener(from, data))),
+    push: (from, data) =>
+      act(() => listeners.forEach((listener) => listener({ type: 'signal', from, data }))),
+    roster: (peers) =>
+      act(() => listeners.forEach((listener) => listener({ type: 'video-peers', peers }))),
     count: () => listeners.size,
   };
 }
 
-function setup({ peerIds = ['me', 'you'], getUserMedia } = {}) {
-  const source = signalSource();
+function setup({ getUserMedia } = {}) {
+  const source = signalSource({ me: 1, you: 2 });
   const send = vi.fn();
   if (getUserMedia) stubCamera(getUserMedia);
   const view = renderHook(
-    (props) => useVideo({ playerId: 'me', peerIds, send, onSignal: source.onSignal, ...props }),
+    (props) => useVideo({ playerId: 'me', send, onVideo: source.onVideo, ...props }),
     { initialProps: {} },
   );
   return { ...view, source, send };
@@ -156,17 +160,17 @@ describe('useVideo camera', () => {
 
 describe('useVideo players', () => {
   it('connects to the players who sit down and drops those who leave', async () => {
-    const { rerender } = setup({ getUserMedia: vi.fn().mockResolvedValue(fakeStream('mine')) });
+    const { source } = setup({ getUserMedia: vi.fn().mockResolvedValue(fakeStream('mine')) });
     await waitFor(() => expect(FakePeerConnection.all).toHaveLength(1));
-    rerender({ peerIds: ['me', 'you', 'third'] });
+    source.roster({ me: 1, you: 2, third: 3 });
     expect(FakePeerConnection.all).toHaveLength(2);
-    rerender({ peerIds: ['me', 'third'] });
+    source.roster({ me: 1, third: 3 });
     expect(FakePeerConnection.all.map((pc) => pc.closed)).toEqual([true, false]);
   });
 
   it('does not reconnect when the same players arrive in another order', () => {
-    const { rerender } = setup({ getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})) });
-    rerender({ peerIds: ['you', 'me', 'you'] });
+    const { source } = setup({ getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})) });
+    source.roster({ you: 2, me: 1 });
     expect(FakePeerConnection.all).toHaveLength(1);
   });
 
@@ -178,11 +182,12 @@ describe('useVideo players', () => {
   });
 
   it('feeds incoming signals to the connection and shows their video', async () => {
-    const { result, source } = setup({
+    const { result, source, send } = setup({
       getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})),
     });
     const theirs = fakeStream('theirs');
-    source.push('you', { description: { type: 'offer', sdp: 'theirs' } });
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    source.push('you', { description: { type: 'answer', sdp: 'theirs' } });
     await waitFor(() => expect(result.current.remotes.you?.stream).toBe(theirs));
   });
 

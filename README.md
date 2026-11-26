@@ -85,7 +85,7 @@ To enable the first deployment:
 
 The first successful deployment and live URL are tracked in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
 
-After a period of inactivity, Azure may need time to start the services and resume SQL. The live UI gives profile and leaderboard reads up to two minutes and checks service health before creating a profile or creating or joining a table. Table polling and in-game actions still use the five-second timeout.
+After a period of inactivity, Azure may need time to start the services and resume SQL. Before creating profiles or opening tables, the live UI checks service health and retries a 503 response within a two-minute limit. Profile and leaderboard reads also have two minutes; table polling and in-game actions keep the five-second timeout.
 
 ### Monitoring
 

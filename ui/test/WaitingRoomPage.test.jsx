@@ -56,7 +56,7 @@ function renderRoom(path = '/tables/K7QX2M', pollMs = 60_000) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/" element={<h1>Create your player</h1>} />
-        <Route path="/lobby" element={<h1>Lobby</h1>} />
+        <Route path="/menu" element={<h1>Main menu</h1>} />
         <Route path="/tables/:code" element={<WaitingRoomPage pollMs={pollMs} />} />
         <Route path="/tables/:code/play" element={<h1>Game started</h1>} />
       </Routes>
@@ -87,7 +87,7 @@ describe('WaitingRoomPage', () => {
     expect(seats[0]).toHaveTextContent('Alex (you)');
     expect(seats[0]).toHaveTextContent('Host');
     expect(seats[1]).toHaveTextContent('Empty seat');
-    expect(screen.getByText('Waiting for players · 1 of 6 seats taken')).toBeInTheDocument();
+    expect(screen.getByText('1 of 6 seats taken')).toBeInTheDocument();
     expect(screen.getByText('K7QX2M')).toBeInTheDocument();
     expect(screen.getByText('10 / 20')).toBeInTheDocument();
     expect(screen.getByText('Alex (you)', { selector: 'dd' })).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe('WaitingRoomPage', () => {
     renderRoom('/tables/K7QX2M', 20);
 
     expect(await screen.findByText('Sofía')).toBeInTheDocument();
-    expect(screen.getByText('Waiting for players · 2 of 6 seats taken')).toBeInTheDocument();
+    expect(screen.getByText('2 of 6 seats taken')).toBeInTheDocument();
   });
 
   it('explains an unknown code', async () => {
@@ -218,7 +218,9 @@ describe('WaitingRoomPage', () => {
     renderRoom();
 
     expect(await screen.findByRole('heading', { name: 'Table not found' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to lobby' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Main menu' }),
+    ).toHaveAttribute('href', '/menu');
   });
 
   it('does not try to join a malformed code', () => {
@@ -321,6 +323,8 @@ describe('WaitingRoomPage video', () => {
     const socket = FakeSocket.latest;
     expect(socket.url).toContain(`/tables/K7QX2M/ws?playerId=${ME}`);
     socket.open();
+    expect(signals(socket)).toEqual([]);
+    socket.push({ type: 'video-peers', peers: { [ME]: 1, [SOFIA]: 2 } });
     await waitFor(() => expect(signals(socket)).toHaveLength(1));
     expect(signals(socket)[0]).toMatchObject({ to: SOFIA });
     expect(signals(socket)[0].data.description.type).toBe('offer');
@@ -333,6 +337,8 @@ describe('WaitingRoomPage video', () => {
     await seatList();
     const socket = FakeSocket.latest;
     socket.open();
+    expect(signals(socket)).toEqual([]);
+    socket.push({ type: 'video-peers', peers: { [ME]: 1, [SOFIA]: 2 } });
     await waitFor(() => expect(signals(socket)).toHaveLength(1));
     socket.push({
       type: 'signal',
@@ -348,9 +354,11 @@ describe('WaitingRoomPage video', () => {
     bothSeated();
     const stream = withCamera();
     renderRoom();
-    fireEvent.click(await screen.findByRole('button', { name: 'Mute microphone' }));
+    const mic = await screen.findByRole('button', { name: 'Mute microphone' });
+    fireEvent.click(mic);
     expect(stream.getAudioTracks()[0].enabled).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Unmute microphone' }));
+    expect(mic).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(mic);
     expect(stream.getAudioTracks()[0].enabled).toBe(true);
   });
 

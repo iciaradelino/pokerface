@@ -309,8 +309,30 @@ describe('video signalling', () => {
     const { anaWs, benWs } = await seatedPair();
     anaWs.send(JSON.stringify({ type: 'signal', from: cleo, to: ben, data: { candidate: 'x' } }));
     const signal = await until(() => last(benWs, 'signal'), 'the signal');
-    expect(signal).toEqual({ type: 'signal', from: ana, to: ben, data: { candidate: 'x' } });
+    expect(signal).toEqual({
+      type: 'signal',
+      from: ana,
+      fromConnection: last(anaWs, 'video-peers').peers[ana],
+      to: ben,
+      data: { candidate: 'x' },
+    });
     expect(last(anaWs, 'signal')).toBeUndefined();
+  });
+
+  it('updates the peers after a reconnect and drops signals to the old socket', async () => {
+    const { anaWs, benWs } = await seatedPair();
+    const oldId = (await until(() => last(benWs, 'video-peers'), 'the roster')).peers[ben];
+    benWs.close();
+    await until(() => !last(anaWs, 'video-peers').peers[ben], 'Ben to disconnect');
+    const reconnected = connect(ben);
+    const newId = await until(() => last(anaWs, 'video-peers').peers[ben], 'Ben to reconnect');
+    expect(newId).not.toBe(oldId);
+    anaWs.send(JSON.stringify({ type: 'signal', to: ben, toConnection: oldId, data: 'old' }));
+    anaWs.send(JSON.stringify({ type: 'signal', to: ben, toConnection: newId, data: 'new' }));
+    await until(() => last(reconnected, 'signal')?.data === 'new', 'the new signal');
+    expect(reconnected.messages.filter((m) => m.type === 'signal').map((m) => m.data)).toEqual([
+      'new',
+    ]);
   });
 
   it('drops signals for players who are not at the table, and anything that is not a signal', async () => {

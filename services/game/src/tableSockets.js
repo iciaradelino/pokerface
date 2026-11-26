@@ -34,7 +34,8 @@ export function attachTableSockets({
   logger = console.log,
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
-  const rooms = new Map(); // table id -> Set of { socket, playerId, admitted, alive }
+  const rooms = new Map(); // table id -> Set of socket connections
+  let nextConnectionId = 0;
 
   const logLine = (path, status, started) =>
     logger(
@@ -59,14 +60,38 @@ export function attachTableSockets({
     rooms.get(tableId).add(connection);
   }
 
+  // A player's newest admitted socket handles their video. Other tabs still get game state.
+  function videoSockets(tableId) {
+    const byPlayer = new Map();
+    for (const connection of rooms.get(tableId) ?? []) {
+      if (connection.videoReady && connection.socket.readyState === connection.socket.OPEN) {
+        byPlayer.set(connection.playerId, connection);
+      }
+    }
+    return byPlayer;
+  }
+
+  function broadcastVideoPeers(tableId) {
+    const active = videoSockets(tableId);
+    const peers = Object.fromEntries(
+      [...active].map(([playerId, connection]) => [playerId, connection.id]),
+    );
+    for (const connection of rooms.get(tableId) ?? []) {
+      if (!connection.admitted) continue;
+      sendJson(connection.socket, {
+        type: 'video-peers',
+        peers: active.get(connection.playerId) === connection ? peers : {},
+      });
+    }
+  }
+
   function leave(tableId, connection) {
     const room = rooms.get(tableId);
     room?.delete(connection);
     if (room?.size === 0) rooms.delete(tableId);
+    else if (connection.admitted) broadcastVideoPeers(tableId);
   }
 
-  // Relays a video signal from an admitted connection to every admitted connection of `to` at
-  // the same table.
   function relay(tableId, sender, raw) {
     if (!sender.admitted) return;
     let message;
@@ -77,16 +102,17 @@ export function attachTableSockets({
     }
     if (message?.type !== 'signal' || !isUuid(message.to) || message.data === undefined) return;
     const to = message.to.toLowerCase();
-    for (const connection of rooms.get(tableId) ?? []) {
-      if (connection.admitted && connection.playerId === to) {
-        sendJson(connection.socket, {
-          type: 'signal',
-          from: sender.playerId,
-          to,
-          data: message.data,
-        });
-      }
-    }
+    const active = videoSockets(tableId);
+    if (active.get(sender.playerId) !== sender) return;
+    const receiver = active.get(to);
+    if (!receiver || (message.toConnection != null && message.toConnection !== receiver.id)) return;
+    sendJson(receiver.socket, {
+      type: 'signal',
+      from: sender.playerId,
+      fromConnection: sender.id,
+      to,
+      data: message.data,
+    });
   }
 
   async function accept(socket, request, tableId, playerId, path, started) {
@@ -99,7 +125,13 @@ export function attachTableSockets({
 
     // In the room from the start so the heartbeat and cleanup see it, but not admitted: it gets
     // no state and no signals, and its own signals are dropped, until membership is confirmed.
-    const connection = { socket, playerId: playerId.toLowerCase(), alive: true, admitted: false };
+    const connection = {
+      id: ++nextConnectionId,
+      socket,
+      playerId: playerId.toLowerCase(),
+      alive: true,
+      admitted: false,
+    };
     join(tableId, connection);
     socket.on('close', () => leave(tableId, connection));
     socket.on('pong', () => {
@@ -126,8 +158,11 @@ export function attachTableSockets({
     // is read after it, so the last state the player gets is always the newest.
     connection.admitted = true;
     const view = await live.view(tableId, connection.playerId);
+    if (!view) return refuse(CLOSE.NOT_FOUND, 'Table not found');
     sendJson(socket, view.state);
     sendJson(socket, view.private);
+    connection.videoReady = true;
+    broadcastVideoPeers(tableId);
     logLine(path, 101, started);
   }
 
@@ -178,10 +213,10 @@ export function attachTableSockets({
 
   return {
     /** Sends the new state to everyone at the table, and closes the sockets of players who left. */
-    broadcast(tableId, game, { timerEndsAt = null } = {}) {
+    broadcast(tableId, game, options) {
       const room = rooms.get(tableId);
       if (!room) return;
-      const state = publicState(game, { timerEndsAt });
+      const state = publicState(game, options);
       const seated = new Set(game.seats.filter((seat) => seat !== null).map((seat) => seat.id));
       for (const connection of [...room]) {
         if (!connection.admitted) continue; // It gets the full state when admitted.

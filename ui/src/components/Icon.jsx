@@ -1,5 +1,19 @@
+const MIC = (
+  <>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+  </>
+);
+
 // Line icons from docs/styling.md: 20px, 2px stroke, rounded ends. Colour follows the text.
 const PATHS = {
+  mic: MIC,
+  micOff: (
+    <>
+      {MIC}
+      <path d="M4 4l16 16" />
+    </>
+  ),
   camera: (
     <>
       <rect x="2.5" y="6" width="13" height="12" rx="2.5" />
@@ -21,7 +35,9 @@ const PATHS = {
   ),
   knock: <path d="M9 4v9M15 4v9M4 19h16" />,
   upDown: <path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" />,
-  allIn: <path d="m4 7 5 5-5 5M11 7l5 5-5 5M20 6v12" />,
+  allIn: (
+    <path d="M8 22v-2L3 14a1.5 1.5 0 0 1 2.2-2L8 14V4a1.5 1.5 0 0 1 3 0v7m0 0v-1a1.5 1.5 0 0 1 3 0v2m0 0v-1a1.5 1.5 0 0 1 3 0v2l2-5a1.5 1.5 0 0 1 2.8 1.1L20 17a5 5 0 0 1-3 4v1Z" />
+  ),
   chip: (
     <>
       <circle cx="12" cy="12" r="9" />

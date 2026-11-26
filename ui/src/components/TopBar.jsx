@@ -7,16 +7,23 @@ import './TopBar.css';
 
 // The pages reached from your avatar, instead of a row of nav links.
 export const MENU_LINKS = [
-  { to: '/lobby', label: 'Lobby' },
+  { to: '/menu', label: 'Main menu' },
   { to: '/tutorial', label: 'How to play' },
   { to: '/profile', label: 'Profile & settings' },
 ];
 
 /** Logo on the left; your chips and avatar on the right once the player has loaded. */
-export function TopBar({ player }) {
+export function TopBar({ player, showMainMenu = false }) {
   return (
     <header className="top-bar">
-      <Logo />
+      <div className="row top-bar__nav">
+        <Logo />
+        {showMainMenu && (
+          <Link className="btn btn--ghost top-bar__main-menu" to="/menu">
+            Main menu
+          </Link>
+        )}
+      </div>
       {player && (
         <div className="row top-bar__me">
           <span className="pill pill--quiet tabular">
@@ -30,7 +37,7 @@ export function TopBar({ player }) {
   );
 }
 
-/** Your avatar as a button that opens a small menu: Lobby, How to play, Profile & settings. */
+/** Your avatar as a button that opens a small menu: Main menu, How to play, Profile & settings. */
 function PlayerMenu({ player }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);

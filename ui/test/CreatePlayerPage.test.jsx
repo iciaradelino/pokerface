@@ -9,7 +9,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/']}>
       <Routes>
         <Route path="/" element={<CreatePlayerPage />} />
-        <Route path="/lobby" element={<h1>Lobby</h1>} />
+        <Route path="/menu" element={<h1>Main menu</h1>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -29,8 +29,7 @@ function json(status, body) {
 }
 
 const nameInput = () => screen.getByLabelText('Display name');
-const submit = () =>
-  fireEvent.click(screen.getByRole('button', { name: 'Create player & enter lobby' }));
+const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Create player' }));
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -71,7 +70,7 @@ describe('CreatePlayerPage', () => {
     fireEvent.click(screen.getByLabelText(/Play with gestures/));
     submit();
 
-    expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Main menu' })).toBeInTheDocument();
     expect(getPlayerId()).toBe('p-42');
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
       name: 'Alex',
@@ -101,6 +100,6 @@ describe('CreatePlayerPage', () => {
     submit();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Player service unavailable');
-    expect(screen.getByRole('button', { name: 'Create player & enter lobby' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Create player' })).toBeEnabled();
   });
 });

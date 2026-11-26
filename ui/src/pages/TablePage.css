@@ -59,7 +59,8 @@
 }
 
 .table-bar__me {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-3);
 }
 
@@ -698,6 +699,15 @@
     padding: var(--space-3) var(--space-4);
   }
 
+  .table-bar__me {
+    justify-content: flex-start;
+    gap: var(--space-2);
+  }
+
+  .table-bar__me .btn {
+    padding-inline: var(--space-3);
+  }
+
   .table-bar__title,
   .table-bar__chips {
     display: none;
@@ -852,4 +862,12 @@
   background: var(--color-lime);
   color: var(--color-on-lime);
   animation: result-pop 520ms var(--ease-out) both;
+}
+
+.table-end {
+  padding: var(--space-5);
+}
+
+.table-end h2 {
+  font-size: var(--text-section);
 }

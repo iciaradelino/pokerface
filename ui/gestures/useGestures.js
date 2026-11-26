@@ -29,6 +29,7 @@ const STARTING = {
  *                  never stopped: its owner turns it off
  *   cameraPending  true while the owner of `stream` is still asking for the camera: the hook
  *                  waits ("starting") instead of opening a second camera of its own
+ *   cameraError    problem reported by the owner of a borrowed camera
  *   turn           what may be done now, from turnFrom() in detector.js; null when it is not my
  *                  turn, so nothing fires
  *   onFire         (action, amount?) when a gesture is confirmed
@@ -47,6 +48,7 @@ export function useGestures({
   enabled,
   stream = null,
   cameraPending = false,
+  cameraError = null,
   turn,
   onFire,
   onProgress,
@@ -66,7 +68,7 @@ export function useGestures({
   });
 
   useEffect(() => {
-    if (!enabled || cameraPending) return undefined;
+    if (!enabled || cameraPending || cameraError) return undefined;
     let stopped = false;
     let frame = null;
     let ownStream = null;
@@ -160,9 +162,10 @@ export function useGestures({
       video.srcObject = null;
       setView(STARTING);
     };
-  }, [enabled, stream, cameraPending, attempt]);
+  }, [enabled, stream, cameraPending, cameraError, attempt]);
 
   const retry = () => setAttempt((n) => n + 1);
   if (!enabled) return { ...STARTING, status: 'off', retry };
+  if (cameraError) return { ...STARTING, status: 'error', problem: cameraError, retry };
   return { ...view, retry };
 }

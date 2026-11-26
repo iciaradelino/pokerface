@@ -6,6 +6,7 @@ import { playersApi } from '../api/playersApi.js';
 import { playerColour } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { BlindButton, ChipAmount, DealerButton, formatChips } from '../components/Chips.jsx';
+import { Icon } from '../components/Icon.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { CardSlot, PlayingCard } from '../components/PlayingCard.jsx';
 import { normalizeCode } from '../tableCode.js';
@@ -79,6 +80,8 @@ export function TablePage() {
   const navigate = useNavigate();
   const { playerId, player, startOver } = usePlayer();
   const [table, setTable] = useState(null);
+  const [returning, setReturning] = useState(false);
+  const [returnError, setReturnError] = useState(null);
   const [problem, setProblem] = useState(null); // notFound | notSeated | unavailable
 
   useEffect(() => {
@@ -105,13 +108,12 @@ export function TablePage() {
     connection,
     closeCode,
     send,
-    onSignal,
+    onVideo,
   } = useTableSocket(code, playerId);
 
   // Video and sound between the players seated here (ui/video/). It goes player to player;
   // the game service only relays the signals. Nobody else at the table receives it.
-  const seated = (live?.seats ?? table?.seats ?? []).map((seat) => seat.playerId);
-  const video = useVideo({ playerId, peerIds: seated, send, onSignal });
+  const video = useVideo({ playerId, send, onVideo });
 
   // Gestures (ui/gestures/, Ali). On unless the profile turned them off, or the player switches
   // them off here. They send the same actions as the buttons, which always work too.
@@ -168,6 +170,22 @@ export function TablePage() {
       : 'No hand yet';
 
   const inHand = !['waiting', 'complete'].includes(stage);
+  const isHost = table?.createdBy === playerId;
+  const outOfPlayers = live && !inHand && live.seats.filter((seat) => seat.stack > 0).length < 2;
+
+  async function returnToRoom() {
+    setReturning(true);
+    setReturnError(null);
+    try {
+      await gameApi.pauseTable(code, playerId);
+    } catch (err) {
+      setReturnError(err instanceof ApiError ? err.message : 'Couldn’t return to the table lobby.');
+      setReturning(false);
+    }
+  }
+
+  if (live?.paused && !inHand) return <Navigate to={`/tables/${code}`} replace />;
+
   const blinds = inHand ? blindPlayers(state?.seats, state?.dealer) : {};
   // The buttons start folded away while gestures work, to make gestures the way to play. With
   // gestures off or no camera they start open, since they are the only way to act.
@@ -204,10 +222,19 @@ export function TablePage() {
               aria-label={video.micOn ? 'Mute' : 'Unmute'}
               title={video.micOn ? 'Mute' : 'Unmute'}
             >
-              <MicIcon off={!video.micOn} />
+              <Icon name={video.micOn ? 'mic' : 'micOff'} />
             </button>
           )}
-          <Button variant="outline" onClick={() => navigate('/lobby')}>
+          {isHost && (
+            <Button
+              variant={outOfPlayers ? 'lime' : 'outline'}
+              onClick={returnToRoom}
+              disabled={returning || live?.paused}
+            >
+              {returning || live?.paused ? 'Returning…' : 'Back to table lobby'}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => navigate('/menu')}>
             Leave table
           </Button>
         </div>
@@ -220,6 +247,18 @@ export function TablePage() {
               {connection === 'connecting'
                 ? 'Connecting to the table…'
                 : 'Connection lost. Reconnecting…'}
+            </div>
+          )}
+
+          {live?.paused && inHand && (
+            <div className="banner" role="status">
+              Everyone will return to the table lobby after this hand.
+            </div>
+          )}
+
+          {returnError && !live?.paused && (
+            <div className="banner" role="alert">
+              {returnError}
             </div>
           )}
 
@@ -250,7 +289,7 @@ export function TablePage() {
                     ),
                   )}
                 </div>
-                {stage === 'waiting' && (
+                {stage === 'waiting' && !outOfPlayers && (
                   <p className="felt__waiting">
                     {state && state.seats.length < 2
                       ? 'Waiting for at least 2 players'
@@ -314,19 +353,30 @@ export function TablePage() {
             </div>
           </section>
 
-          <ActionBar
-            key={`${state?.handNumber}-${stage}-${state?.currentPlayer}-${mine?.minRaise}`}
-            code={code}
-            playerId={playerId}
-            state={state}
-            mine={mine}
-            pot={pot}
-            bigBlind={table?.bigBlind ?? 1}
-            waitingFor={state?.currentPlayer ? nameOf(state.currentPlayer) : null}
-            onPlayerGone={startOver}
-            open={buttonsOpen}
-            onToggle={() => setButtonsChoice(!buttonsOpen)}
-          />
+          {outOfPlayers ? (
+            <section className="panel table-end" aria-label="Match ended">
+              <h2>Not enough players with chips</h2>
+              <p className="muted">
+                {isHost
+                  ? 'At least two players need chips to start another hand.'
+                  : 'Waiting for the host to return everyone to the table lobby.'}
+              </p>
+            </section>
+          ) : (
+            <ActionBar
+              key={`${state?.handNumber}-${stage}-${state?.currentPlayer}-${mine?.minRaise}`}
+              code={code}
+              playerId={playerId}
+              state={state}
+              mine={mine}
+              pot={pot}
+              bigBlind={table?.bigBlind ?? 1}
+              waitingFor={state?.currentPlayer ? nameOf(state.currentPlayer) : null}
+              onPlayerGone={startOver}
+              open={buttonsOpen}
+              onToggle={() => setButtonsChoice(!buttonsOpen)}
+            />
+          )}
         </div>
 
         <aside className="table-page__side" aria-label="Leaderboard and gestures">
@@ -525,26 +575,6 @@ function CopyCode({ code }) {
   );
 }
 
-function MicIcon({ off }) {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-      {off && <path d="M4 4l16 16" />}
-    </svg>
-  );
-}
-
 /** Top players by chips, in the side column under the gestures. */
 function TableLeaderboard({ playerId }) {
   const [rows, setRows] = useState(null); // null while loading, [] when unavailable or empty
@@ -600,7 +630,7 @@ function TableProblem({ code, problem }) {
       <h1>{title}</h1>
       <p className="muted">{text}</p>
       <p>
-        <Link to="/lobby">Back to the lobby</Link>
+        <Link to="/menu">Back to main menu</Link>
       </p>
     </main>
   );
