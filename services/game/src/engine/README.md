@@ -62,7 +62,7 @@ try {
 }
 
 // After every change: one "state" to everyone, one "private" to each player
-broadcast(publicState(table, { timerEndsAt }));
+broadcast(publicState(table, { timerEndsAt, paused }));
 for (const id of seatedPlayers) sendTo(id, privateState(table, id));
 
 // When a hand ends: POST /players/:playerId/results with body { handId, delta }
@@ -73,6 +73,8 @@ for (const { playerId, body } of handResults(table, tableId)) await playersClien
 added. `minRaise` and `maxRaise` use the same meaning.
 
 - `stage`: `waiting`, `preflop`, `flop`, `turn`, `river`, `complete`.
+- `paused`: defaults to `false`. When `true`, the current hand can finish and the game service
+  waits for the host to resume before dealing another.
 - `seats[].status`: `active`, `folded`, `allin`, `waiting` (not in this hand), `out` (no chips).
 - `result` (only when `stage` is `complete`): winners, amounts, hand names and cards shown.
 - Additions to §6: `seat`, `handNumber`, `result` and `toCall`.
