@@ -1,0 +1,8 @@
+Requests
+| where TimeGenerated >= ago(24h)
+| summarize Requests = count(), ServerErrors = countif(Status >= 500),
+    AvgMs = avg(DurationMs), P95Ms = percentile(DurationMs, 95) by Service
+| project Service, Requests, ServerErrors,
+    ErrorRatePct = round(100.0 * ServerErrors / Requests, 2),
+    AvgMs = round(AvgMs, 2), P95Ms = round(P95Ms, 2)
+| order by Service asc

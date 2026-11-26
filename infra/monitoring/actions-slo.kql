@@ -1,0 +1,8 @@
+Requests
+| where TimeGenerated >= ago(7d) and Service == "sdd-3a-g5-game" and Method == "POST"
+| where Path matches regex @"(?i)^/tables/[^/]+/actions/?$"
+| where Status between (200 .. 299) or Status >= 500
+| summarize Attempts = count(), Good = countif(Status between (200 .. 299) and DurationMs < 300)
+| extend GoodPct = iff(Attempts == 0, real(null), 100.0 * Good / Attempts)
+| extend Result = case(Attempts == 0, "No data", GoodPct >= 99.0, "Met", "Missed")
+| project Attempts, Good, GoodPct = round(GoodPct, 2), TargetPct = 99.0, Result

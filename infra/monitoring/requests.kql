@@ -1,0 +1,12 @@
+let Requests =
+    union isfuzzy=true
+        (datatable(TimeGenerated:datetime, ContainerAppName_s:string, Log_s:string) []),
+        ContainerAppConsoleLogs_CL
+    | where ContainerAppName_s in ("sdd-3a-g5-players", "sdd-3a-g5-game")
+    | extend Entry = parse_json(Log_s)
+    | where tostring(Entry.event) == "request"
+    | project TimeGenerated, Service = ContainerAppName_s,
+        Method = tostring(Entry.method), Path = tostring(Entry.path),
+        Status = toint(Entry.status), DurationMs = todouble(Entry.durationMs)
+    | where Status between (200 .. 599) and DurationMs >= 0
+    | where Method != "OPTIONS" and Path != "/health";

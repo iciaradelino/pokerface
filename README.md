@@ -85,6 +85,14 @@ To enable the first deployment:
 
 The first successful deployment and live URL are tracked in [#2](https://github.com/iciaradelino/pokerface/issues/2). Monitoring is [#16](https://github.com/iciaradelino/pokerface/issues/16).
 
+### Monitoring
+
+After the Azure deployment, open **Pokerface monitoring** under Azure Monitor → Workbooks. It shows request count, 5xx rate, and average and p95 response times for both services over the last 24 hours.
+
+The game action SLO is **99% of eligible `POST /tables/:id/actions` requests return 2xx in under 300 ms over seven days**. Server errors count as failures; client errors are excluded. A window with no eligible requests shows **No data**. The same query is saved as **Pokerface action response SLO (7 days)** in the `sdd-3a-g5-logs` workspace under Logs → Queries.
+
+To check monitoring after deployment, play a hand on the live site and wait for the request logs to arrive. In the workspace, run [requests.kql](infra/monitoring/requests.kql) followed by `Requests | take 20`. Check that both services appear in the workbook and that the game action SLO shows the action requests. Health probes, WebSocket upgrades and CORS preflights are excluded.
+
 See the [architecture guide](docs/architecture.md) for code locations, plus our [Definition of Done](docs/scrum/definition-of-done.md) and [Sprint 0 record](docs/scrum/sprint-0.md).
 
 ## Core experience

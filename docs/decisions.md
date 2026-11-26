@@ -167,3 +167,24 @@ We use Bicep and GitHub Actions. After CI passes on `main`, the deploy job publi
 ### Consequences
 
 The two images must be public so Container Apps can pull them without a registry password. SQL credentials live in GitHub and Azure secrets. The first deployment needs the professor's identity setup and an explicit repository opt-in. Deployments fail if either backend does not report the expected version or the live UI cannot be reached before the smoke test times out.
+
+---
+
+## Monitoring and game action SLO
+
+### Context
+
+We need to see real request load, server errors and response times on Azure, and measure whether poker actions respond quickly enough during play.
+
+### Decision
+
+We query the JSON request logs that both Container Apps already write to Log Analytics. A shared Azure Workbook shows the last 24 hours by service. A saved query measures whether 99% of eligible game actions return 2xx in under 300 ms over seven days. A 5xx counts as a failure; a 4xx does not count toward the target. Health checks, preflights and WebSocket upgrades are excluded from the HTTP dashboard.
+
+### Alternatives considered
+
+- Platform metrics give us broad traffic and latency numbers, but don't isolate the poker action route.
+- A separate monitoring service would add another system to deploy when the existing workspace already receives these logs.
+
+### Consequences
+
+Bicep deploys the shared workbook and saved query with the workspace. The SLO measures server response time for requests that reach the app; it doesn't measure browser or network latency, or requests that Azure rejects before they reach the container. A window with no eligible requests reports **No data**. We verify the workbook after the first live playtest.
