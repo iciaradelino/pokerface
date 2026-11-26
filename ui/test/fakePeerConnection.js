@@ -79,12 +79,13 @@ export class FakePeerConnection {
       this.failNextRemote = false;
       throw new Error('bad description');
     }
+    this.remoteDescription = description;
     this.signalingState = description.type === 'offer' ? 'have-remote-offer' : 'stable';
     if (description.sdp) this.ontrack?.({ streams: [streams.get(description.sdp)] });
   }
 
   async addIceCandidate(candidate) {
-    if (this.signalingState === 'closed') throw new Error('closed');
+    if (!this.remoteDescription || this.closed) throw new Error('no remote description');
     this.candidates.push(candidate);
   }
 

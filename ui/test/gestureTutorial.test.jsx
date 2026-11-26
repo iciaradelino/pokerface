@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { GestureTutorial, nextPath, tutorialDone } from '../gestures/GestureTutorial.jsx';
 import { WaitingRoomPage } from '../src/pages/WaitingRoomPage.jsx';
 import { clearPlayerId, savePlayerId } from '../src/player.js';
+import { FakeSocket } from './fakeSocket.js';
 import { fakeStream } from './fakePeerConnection.js';
 import { hand } from './gestureHands.js';
 
@@ -42,6 +43,8 @@ const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 beforeEach(() => {
+  FakeSocket.reset();
+  vi.stubGlobal('WebSocket', FakeSocket);
   clock = 0;
   queued = [];
   fake.hands = [];
@@ -72,8 +75,8 @@ async function renderTutorial(url = '/tutorial?next=%2Ftables%2FK7QX2M') {
     <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route path="/tutorial" element={<GestureTutorial />} />
-        <Route path="/tables/:code" element={<p>Waiting room</p>} />
-        <Route path="/lobby" element={<p>Lobby</p>} />
+        <Route path="/tables/:code" element={<p>Table lobby</p>} />
+        <Route path="/menu" element={<p>Main menu</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -123,7 +126,7 @@ describe('gesture tutorial', () => {
     expect(tutorialDone()).toBe(true);
     expect(camera.getTracks()[0].stopped).toBe(true); // camera off once it is done
     fireEvent.click(screen.getByRole('link', { name: 'Continue' }));
-    expect(screen.getByText('Waiting room')).toBeInTheDocument();
+    expect(screen.getByText('Table lobby')).toBeInTheDocument();
   });
 
   it('says which gesture it saw when it is not the one asked for', async () => {
@@ -182,7 +185,7 @@ describe('gesture tutorial', () => {
   it('can be skipped, back to where the player came from', async () => {
     await renderTutorial();
     fireEvent.click(screen.getByRole('link', { name: 'Skip for now' }));
-    expect(screen.getByText('Waiting room')).toBeInTheDocument();
+    expect(screen.getByText('Table lobby')).toBeInTheDocument();
     expect(camera.getTracks()[0].stopped).toBe(true);
     expect(tutorialDone()).toBe(false);
   });
@@ -223,12 +226,13 @@ describe('gesture tutorial', () => {
       '/tables/K7QX2M#//example.com',
       ' /tables/K7QX2M',
     ]) {
-      expect(nextPath(value), value).toBe('/lobby');
+      expect(nextPath(value), value).toBe('/menu');
     }
     // Other pages of the app are not needed here either.
-    expect(nextPath('/tables/K7QX2M/play')).toBe('/lobby');
-    expect(nextPath('/lobby')).toBe('/lobby');
-    expect(nextPath(null)).toBe('/lobby');
+    expect(nextPath('/tables/K7QX2M/play')).toBe('/menu');
+    expect(nextPath('/menu')).toBe('/menu');
+    expect(nextPath('/lobby')).toBe('/menu');
+    expect(nextPath(null)).toBe('/menu');
   });
 
   it('never gives React Router a link to another site', () => {
@@ -240,19 +244,19 @@ describe('gesture tutorial', () => {
 
   it('does not leave the app from a crafted Skip link', async () => {
     await renderTutorial('/tutorial?next=%2F%5Cexample.com');
-    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute('href', '/lobby');
+    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute('href', '/menu');
   });
 
   it('does not leave the app from a Skip link with dots in it', async () => {
     await renderTutorial('/tutorial?next=%2F..%2F%2Fexample.com');
     const skip = screen.getByRole('link', { name: 'Skip for now' });
-    expect(skip).toHaveAttribute('href', '/lobby');
+    expect(skip).toHaveAttribute('href', '/menu');
     fireEvent.click(skip);
-    expect(screen.getByText('Lobby')).toBeInTheDocument();
+    expect(screen.getByText('Main menu')).toBeInTheDocument();
   });
 });
 
-describe('waiting room link to the tutorial', () => {
+describe('gesture practice in the waiting room', () => {
   function renderRoom() {
     vi.stubGlobal(
       'fetch',
@@ -284,11 +288,49 @@ describe('waiting room link to the tutorial', () => {
     );
   }
 
-  it('offers the tutorial and comes back to the same table', async () => {
+  it('practises and returns without opening another socket or joining again', async () => {
     renderRoom();
-    const link = await screen.findByRole('link', { name: 'Practise gestures' });
-    expect(link).toHaveAttribute('href', '/tutorial?next=%2Ftables%2FK7QX2M');
+    const practice = await screen.findByRole('button', { name: 'Practise gestures' });
     expect(screen.getByText(/New to gestures\?/)).toBeInTheDocument();
+    const socket = FakeSocket.latest;
+    fireEvent.click(practice);
+    expect(screen.getByRole('heading', { name: 'Table lobby' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Check' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Your camera', { selector: 'video' }).srcObject).toBe(camera);
+    fireEvent.click(screen.getByRole('button', { name: 'Exit practice' }));
+    expect(screen.getByRole('list', { name: 'Seats' })).toBeInTheDocument();
+    expect(FakeSocket.all).toEqual([socket]);
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/join'))).toHaveLength(1);
+    expect(socket.closed).toBe(false);
+  });
+
+  it('returns to the lobby on the last gesture and confirms completion inline', async () => {
+    renderRoom();
+    fireEvent.click(await screen.findByRole('button', { name: 'Practise gestures' }));
+    await screen.findByText('No hand in view');
+    const socket = FakeSocket.latest;
+
+    frames(knock(0.4), knock(0.5), knock(0.4), knock(0.5), knock(0.4));
+    rest();
+    hold([hand('Thumb_Up')], 1100);
+    rest();
+    hold([hand('Thumb_Down')], 1100);
+    rest();
+    hold([hand('Open_Palm', { y: 0.525 })], 200);
+    hold([hand('Closed_Fist', { curled: true })], 700);
+    rest();
+    hold([hand('ILoveYou')], 1100);
+
+    expect(screen.getByRole('list', { name: 'Seats' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Gestures' })).getByRole('status'),
+    ).toHaveTextContent('All five gestures learned.');
+    expect(screen.getByRole('button', { name: 'Practise gestures' })).toHaveFocus();
+    expect(screen.queryByRole('heading', { name: /You’re ready/ })).toBeNull();
+    expect(tutorialDone()).toBe(true);
+    expect(FakeSocket.all).toEqual([socket]);
+    expect(camera.getTracks()[0].stopped).toBe(false);
   });
 
   it('words it as a refresher once the tutorial is done', async () => {

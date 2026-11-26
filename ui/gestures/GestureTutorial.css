@@ -142,6 +142,14 @@
   transform: translateX(-50%);
 }
 
+.tutorial__hold--notice {
+  flex-direction: column;
+  gap: var(--space-2);
+  width: max-content;
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+}
+
 .tutorial__hold .gesture-ring {
   flex-shrink: 0;
 }

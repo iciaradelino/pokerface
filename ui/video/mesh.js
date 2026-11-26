@@ -23,16 +23,18 @@ export function createMesh({
   iceServers = DEFAULT_ICE_SERVERS,
   PeerConnection = globalThis.RTCPeerConnection,
 }) {
-  const peers = new Map(); // playerId -> { pc, polite, makingOffer, ignoreOffer, stream, state }
+  const peers = new Map();
   let localStream = null;
-  let seatsKnown = false; // true once setPeers has been called
 
-  function createPeer(remoteId) {
+  function createPeer(remoteId, connectionId) {
     const pc = new PeerConnection({ iceServers });
     // "Perfect negotiation": both sides may offer at once, and the polite one backs off.
     // Comparing ids gives both sides the same answer without talking to each other.
     const peer = {
       pc,
+      connectionId,
+      incoming: Promise.resolve(),
+      pendingCandidates: [],
       polite: selfId > remoteId,
       makingOffer: false,
       ignoreOffer: false,
@@ -44,7 +46,7 @@ export function createMesh({
       try {
         peer.makingOffer = true;
         await pc.setLocalDescription();
-        send(remoteId, { description: pc.localDescription });
+        sendToPeer(remoteId, peer, { description: pc.localDescription });
       } catch {
         // Failed to start negotiating: the next change (or a retry) will try again.
       } finally {
@@ -52,7 +54,7 @@ export function createMesh({
       }
     };
     pc.onicecandidate = ({ candidate }) => {
-      if (candidate) send(remoteId, { candidate });
+      if (candidate) sendToPeer(remoteId, peer, { candidate });
     };
     pc.ontrack = ({ streams }) => {
       peer.stream = streams[0] ?? null;
@@ -65,13 +67,18 @@ export function createMesh({
     };
 
     if (localStream) addLocalTracks(peer);
-    else {
-      // Still see and hear them with no camera or microphone.
-      pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.addTransceiver('audio', { direction: 'recvonly' });
+    // Still receive both media kinds when my camera or microphone is missing.
+    for (const kind of ['video', 'audio']) {
+      if (!localStream?.getTracks().some((track) => track.kind === kind)) {
+        pc.addTransceiver(kind, { direction: 'recvonly' });
+      }
     }
     peers.set(remoteId, peer);
     return peer;
+  }
+
+  function sendToPeer(id, peer, data) {
+    if (peers.get(id) === peer) send(id, data, peer.connectionId);
   }
 
   function addLocalTracks({ pc }) {
@@ -84,8 +91,45 @@ export function createMesh({
   function removePeer(remoteId) {
     const peer = peers.get(remoteId);
     if (!peer) return;
-    peer.pc.close();
     peers.delete(remoteId);
+    peer.pc.close();
+  }
+
+  async function receive(from, peer, data) {
+    if (peers.get(from) !== peer) return;
+    const { pc } = peer;
+    try {
+      if (data.description) {
+        const collision =
+          data.description.type === 'offer' && (peer.makingOffer || pc.signalingState !== 'stable');
+        peer.ignoreOffer = !peer.polite && collision;
+        if (peer.ignoreOffer) {
+          peer.pendingCandidates = [];
+          return;
+        }
+        await pc.setRemoteDescription(data.description);
+        for (const candidate of peer.pendingCandidates.splice(0)) {
+          await addCandidate(pc, candidate);
+        }
+        if (data.description.type === 'offer') {
+          await pc.setLocalDescription();
+          sendToPeer(from, peer, { description: pc.localDescription });
+        }
+      } else if (!peer.ignoreOffer) {
+        if (pc.remoteDescription) await addCandidate(pc, data.candidate);
+        else if (peer.pendingCandidates.length < 50) peer.pendingCandidates.push(data.candidate);
+      }
+    } catch {
+      // A malformed or late description must not break this connection.
+    }
+  }
+
+  async function addCandidate(pc, candidate) {
+    try {
+      await pc.addIceCandidate(candidate);
+    } catch {
+      // A candidate can belong to an offer replaced during a collision.
+    }
   }
 
   return {
@@ -100,49 +144,23 @@ export function createMesh({
       }
     },
 
-    /** The other players at the table. Connects to new ones and drops those who left. */
-    setPeers(ids) {
-      seatsKnown = true;
-      const wanted = new Set(ids.filter((id) => id !== selfId));
-      for (const id of [...peers.keys()]) if (!wanted.has(id)) removePeer(id);
-      for (const id of wanted) if (!peers.has(id)) createPeer(id);
+    /** Admitted video sockets, keyed by player id. A reconnect replaces only that peer. */
+    setPeers(roster) {
+      for (const [id, peer] of peers) {
+        if (roster[id] !== peer.connectionId) removePeer(id);
+      }
+      for (const [id, connectionId] of Object.entries(roster)) {
+        if (id !== selfId && !peers.has(id)) createPeer(id, connectionId);
+      }
       onChange();
     },
 
-    /**
-     * A "signal" message from another player: { description } or { candidate }.
-     * After setPeers, only players in the latest list are answered.
-     */
-    async handleSignal(from, data) {
-      if (from === selfId || typeof from !== 'string') return;
-      if (!data?.description && !data?.candidate) return;
-      // Faces and voices: once I know who is at the table, strangers get no answer, even if the
-      // relay lets their signal through. Before the first list, an offer may simply be early.
-      if (seatsKnown && !peers.has(from)) return;
-      const peer = peers.get(from) ?? createPeer(from);
-      const { pc } = peer;
-      try {
-        if (data.description) {
-          const collision =
-            data.description.type === 'offer' &&
-            (peer.makingOffer || pc.signalingState !== 'stable');
-          peer.ignoreOffer = !peer.polite && collision;
-          if (peer.ignoreOffer) return;
-          await pc.setRemoteDescription(data.description);
-          if (data.description.type === 'offer') {
-            await pc.setLocalDescription();
-            send(from, { description: pc.localDescription });
-          }
-        } else if (data.candidate) {
-          try {
-            await pc.addIceCandidate(data.candidate);
-          } catch (error) {
-            if (!peer.ignoreOffer) throw error; // candidates for an offer we ignored are expected to fail
-          }
-        }
-      } catch {
-        // A malformed or late signal from one player must not break the others.
-      }
+    /** Process a peer's descriptions and ICE candidates in the order they arrived. */
+    handleSignal(from, data) {
+      const peer = peers.get(from);
+      if (!peer || (!data?.description && !data?.candidate)) return;
+      peer.incoming = peer.incoming.then(() => receive(from, peer, data));
+      return peer.incoming;
     },
 
     /** Who I can currently see: { [playerId]: { stream, state } }. */

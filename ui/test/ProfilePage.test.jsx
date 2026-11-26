@@ -235,7 +235,7 @@ describe('ProfilePage', () => {
 });
 
 describe('TopBar menu', () => {
-  function renderBar(path = '/lobby') {
+  function renderBar(path = '/menu') {
     return render(
       <MemoryRouter initialEntries={[path]}>
         <TopBar player={ALEX} />
@@ -255,7 +255,7 @@ describe('TopBar menu', () => {
     expect(avatar()).toHaveAttribute('aria-expanded', 'true');
 
     const menu = screen.getByRole('navigation', { name: 'Menu' });
-    expect(within(menu).getByRole('link', { name: 'Lobby' })).toHaveAttribute(
+    expect(within(menu).getByRole('link', { name: 'Main menu' })).toHaveAttribute(
       'aria-current',
       'page',
     );

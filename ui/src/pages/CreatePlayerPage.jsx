@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { playersApi } from '../api/playersApi.js';
 import { ApiError } from '../api/http.js';
 import { COLOUR_CHOICES, playerColour } from '../components/Avatar.jsx';
@@ -8,6 +8,7 @@ import { Icon } from '../components/Icon.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { PlayingCard } from '../components/PlayingCard.jsx';
 import { NAME_MAX, savePlayerId, validateName } from '../player.js';
+import { isCompleteCode } from '../tableCode.js';
 import './CreatePlayerPage.css';
 
 const FEATURES = [
@@ -18,6 +19,10 @@ const FEATURES = [
 
 export function CreatePlayerPage() {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const tableCode = state?.tableCode;
+  const joiningTable = isCompleteCode(tableCode);
+  const submitLabel = joiningTable ? 'Create player & join table' : 'Create player';
   const nameInput = useRef(null);
   const ids = { name: useId(), nameHelp: useId(), gestures: useId() };
 
@@ -46,7 +51,7 @@ export function CreatePlayerPage() {
         gestureSettings: { enabled: gestures },
       });
       savePlayerId(player.id);
-      navigate('/lobby', { replace: true });
+      navigate(joiningTable ? `/tables/${tableCode}` : '/menu', { replace: true });
     } catch (err) {
       if (err instanceof ApiError && !err.isUnavailable) {
         setNameError(err.message);
@@ -200,7 +205,7 @@ export function CreatePlayerPage() {
           )}
 
           <Button type="submit" variant="lime" size="primary" block disabled={saving}>
-            {saving ? 'Creating player…' : 'Create player & enter lobby'}
+            {saving ? 'Creating player…' : submitLabel}
           </Button>
         </form>
       </main>

@@ -73,6 +73,7 @@ describe('publicState', () => {
   it('describes a table before the first hand', () => {
     expect(publicState(table3())).toEqual({
       type: 'state',
+      paused: false,
       handNumber: 0,
       stage: 'waiting',
       board: [],
@@ -90,9 +91,13 @@ describe('publicState', () => {
   });
 
   it('shows blinds, the dealer, whose turn it is and the timer during a hand', () => {
-    const state = publicState(started(), { timerEndsAt: '2026-11-20T18:00:30.000Z' });
+    const state = publicState(started(), {
+      timerEndsAt: '2026-11-20T18:00:30.000Z',
+      paused: true,
+    });
     expect(state).toMatchObject({
       stage: 'preflop',
+      paused: true,
       dealer: 'ana',
       currentPlayer: 'ana',
       timerEndsAt: '2026-11-20T18:00:30.000Z',

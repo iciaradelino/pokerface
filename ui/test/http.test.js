@@ -20,6 +20,7 @@ function jsonResponse(status, body) {
 const startupTimeoutMs = config.startupTimeoutMs;
 afterEach(() => {
   config.startupTimeoutMs = startupTimeoutMs;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -130,13 +131,40 @@ describe('Azure startup', () => {
     expect(fetch.mock.calls.filter(([, options]) => options.method === 'POST')).toHaveLength(1);
   });
 
-  it('does not create a profile when the players service fails its startup check', async () => {
-    config.startupTimeoutMs = 120_000;
+  it('waits through a temporary database outage before creating a profile once', async () => {
+    vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout'] });
+    config.startupTimeoutMs = 7000;
+    const fetch = mockFetch(async () => jsonResponse(201, { id: 'p1' }))
+      .mockResolvedValueOnce(jsonResponse(503, { status: 'unavailable' }))
+      .mockResolvedValueOnce(jsonResponse(200, { status: 'ok' }));
+
+    const player = playersApi.create({ name: 'Ana' }).catch((error) => error);
+    await vi.advanceTimersByTimeAsync(3000);
+
+    await expect(player).resolves.toEqual({ id: 'p1' });
+    expect(
+      fetch.mock.calls.map(([url, options]) => [new URL(url).pathname, options.method]),
+    ).toEqual([
+      ['/health', 'GET'],
+      ['/health', 'GET'],
+      ['/players', 'POST'],
+    ]);
+  });
+
+  it('stops startup checks within the deadline without creating a profile', async () => {
+    vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout'] });
+    config.startupTimeoutMs = 7000;
     const fetch = mockFetch(async () => jsonResponse(503, { status: 'unavailable' }));
 
-    await expect(playersApi.create({ name: 'Ana' })).rejects.toMatchObject({ status: 503 });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0][0]).toBe('http://localhost:3001/health');
-    expect(fetch.mock.calls[0][1].method).toBe('GET');
+    const error = expect(playersApi.create({ name: 'Ana' })).rejects.toMatchObject({ status: 503 });
+    await vi.advanceTimersByTimeAsync(7000);
+
+    await error;
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(
+      fetch.mock.calls.every(
+        ([url, options]) => url.endsWith('/health') && options.method === 'GET',
+      ),
+    ).toBe(true);
   });
 });

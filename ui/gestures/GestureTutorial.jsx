@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { Button } from '../src/components/Button.jsx';
 import { formatChips } from '../src/components/Chips.jsx';
 import { Icon } from '../src/components/Icon.jsx';
 import { TopBar } from '../src/components/TopBar.jsx';
@@ -46,14 +47,14 @@ function markTutorialDone() {
 
 /**
  * Where to go after the tutorial. `next` comes from the address, so anyone can write it: it is
- * only ever a waiting room ("/tables/<code>") or the lobby. Anything else, including every way of
- * writing another site ("//", "\", "..", tabs, encoded characters), goes to the lobby. The path is
+ * only ever a waiting room ("/tables/<code>") or the main menu. Anything else, including every way of
+ * writing another site ("//", "\", "..", tabs, encoded characters), goes to the main menu. The path is
  * rebuilt from the table code instead of reusing what was passed in.
  */
 export function nextPath(value) {
   if (value === '/profile') return '/profile'; // "Recalibrate" on the profile page
   const match = /^\/tables\/([A-Za-z0-9]{6})$/.exec(typeof value === 'string' ? value : '');
-  return match ? `/tables/${normalizeCode(match[1])}` : '/lobby';
+  return match ? `/tables/${normalizeCode(match[1])}` : '/menu';
 }
 
 const describe = (action, amount) =>
@@ -108,12 +109,29 @@ const TIPS = [
  * /tutorial?next=<path>. Practise each gesture and see when it is recognised (issue #13).
  * Nothing is sent to the game: it only uses the camera on this device. "Next gesture" moves the
  * current one to the end, to come back to it later. Skip, or Continue at the end, goes to `next`
- * (the waiting room or profile it came from) or the lobby.
+ * (the waiting room or profile it came from) or the main menu.
  */
 export function GestureTutorial() {
   const [params] = useSearchParams();
   const next = nextPath(params.get('next'));
   const { player } = usePlayer();
+  return (
+    <div className="tutorial">
+      <TopBar player={player} />
+      <main className="tutorial__main">
+        <GesturePractice player={player} next={next} />
+      </main>
+    </div>
+  );
+}
+
+export function GesturePractice({ player, next, onExit, onComplete, video }) {
+  const inRoom = Boolean(onExit);
+  const lessonTitle = useRef(null);
+
+  useEffect(() => {
+    if (inRoom) lessonTitle.current?.focus({ preventScroll: true });
+  }, [inRoom]);
   const holdMs = holdMsOf(player);
   const [order, setOrder] = useState(() => GESTURE_GUIDE.map((step) => step.action));
   const [done, setDone] = useState([]);
@@ -123,8 +141,12 @@ export function GestureTutorial() {
   const current = left[0] ?? null;
   const finished = current === null;
 
+  const cameraError = ['denied', 'unavailable'].includes(video?.camera) ? video.camera : null;
   const gestures = useGestures({
-    enabled: !finished, // the camera goes off once every gesture is done
+    enabled: !finished,
+    stream: video?.local,
+    cameraPending: video?.camera === 'asking',
+    cameraError,
     turn: PRACTICE_TURN,
     holdMs,
     onFire: (action, amount) => {
@@ -132,8 +154,14 @@ export function GestureTutorial() {
       setLast({ action, amount, right });
       if (!right) return;
       const nowDone = [...done, action];
+      if (nowDone.length === GESTURE_GUIDE.length) {
+        markTutorialDone();
+        if (onComplete) {
+          onComplete();
+          return;
+        }
+      }
       setDone(nowDone);
-      if (nowDone.length === GESTURE_GUIDE.length) markTutorialDone();
     },
   });
 
@@ -143,9 +171,8 @@ export function GestureTutorial() {
   }
 
   return (
-    <div className="tutorial">
-      <TopBar player={player} />
-      <main className="tutorial__main">
+    <>
+      {!inRoom && (
         <div className="tutorial__head">
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             <h1>Learn the gestures</h1>
@@ -155,22 +182,30 @@ export function GestureTutorial() {
           </div>
           <LearnedBar learned={done.length} total={GESTURE_GUIDE.length} />
         </div>
+      )}
 
-        {finished ? (
-          <section className="panel tutorial__finished" aria-labelledby="tutorial-finished">
-            <h2 id="tutorial-finished">You&rsquo;re ready ✓</h2>
-            <p className="muted">
-              You did all five gestures. At the table they work on your turn, and the buttons always
-              work too.
-            </p>
-            <Link className="btn btn--lime btn--primary-size" to={next}>
-              Continue
-            </Link>
-          </section>
-        ) : (
-          <div className="tutorial__grid">
-            <div className="tutorial__left">
-              <CameraStage gestures={gestures} current={current} holdMs={holdMs} />
+      {finished ? (
+        <section className="panel tutorial__finished" aria-labelledby="tutorial-finished">
+          <h2 id="tutorial-finished">You&rsquo;re ready ✓</h2>
+          <p className="muted">
+            You did all five gestures. At the table they work on your turn, and the buttons always
+            work too.
+          </p>
+          <Link className="btn btn--lime btn--primary-size" to={next}>
+            Continue
+          </Link>
+        </section>
+      ) : (
+        <div className="tutorial__grid">
+          <div className="tutorial__left">
+            <CameraStage
+              gestures={gestures}
+              previewStream={video?.local}
+              current={current}
+              holdMs={holdMs}
+              retry={cameraError ? video.retry : gestures.retry}
+            />
+            {!inRoom && (
               <ul className="tutorial__tips" aria-label="Tips">
                 {TIPS.map((tip) => (
                   <li key={tip} className="tutorial__tip">
@@ -178,85 +213,94 @@ export function GestureTutorial() {
                   </li>
                 ))}
               </ul>
-            </div>
+            )}
+          </div>
 
-            <div className="tutorial__right">
-              <section className="tutorial__now" aria-labelledby="tutorial-now">
-                <p className="tutorial__now-label">Now practising</p>
-                <div className="tutorial__now-title">
-                  <span className="tutorial__now-icon">
-                    <Icon name={LESSONS[current].icon} size={26} />
-                  </span>
-                  <h2 id="tutorial-now">{ACTION_LABELS[current]}</h2>
-                </div>
-                <p>{LESSONS[current].explain(formatHold(holdMs).replace(' ', ' '))}</p>
-                <p className="text-small tutorial__now-real">
-                  At a real table: {LESSONS[current].realTable}
+          <div className="tutorial__right">
+            {inRoom && <LearnedBar learned={done.length} total={GESTURE_GUIDE.length} />}
+            <section className="tutorial__now" aria-labelledby="tutorial-now">
+              <p className="tutorial__now-label">Now practising</p>
+              <div className="tutorial__now-title">
+                <span className="tutorial__now-icon">
+                  <Icon name={LESSONS[current].icon} size={26} />
+                </span>
+                <h2 id="tutorial-now" ref={lessonTitle} tabIndex={inRoom ? -1 : undefined}>
+                  {ACTION_LABELS[current]}
+                </h2>
+              </div>
+              <p>{LESSONS[current].explain(formatHold(holdMs).replace(' ', ' '))}</p>
+              <p className="text-small tutorial__now-real">
+                At a real table: {LESSONS[current].realTable}
+              </p>
+              {last && (
+                <p
+                  className={
+                    last.right
+                      ? 'tutorial__feedback'
+                      : 'tutorial__feedback tutorial__feedback--wrong'
+                  }
+                  role="status"
+                >
+                  {last.right
+                    ? `✓ ${describe(last.action, last.amount)} recognised.`
+                    : `That was ${describe(last.action, last.amount)}. Try ${ACTION_LABELS[current]}.`}
                 </p>
-                {last && (
-                  <p
-                    className={
-                      last.right
-                        ? 'tutorial__feedback'
-                        : 'tutorial__feedback tutorial__feedback--wrong'
-                    }
-                    role="status"
-                  >
-                    {last.right
-                      ? `✓ ${describe(last.action, last.amount)} recognised.`
-                      : `That was ${describe(last.action, last.amount)}. Try ${ACTION_LABELS[current]}.`}
-                  </p>
-                )}
-              </section>
+              )}
+            </section>
 
-              <section className="panel tutorial__steps" aria-label="All gestures">
-                <ol className="tutorial__list">
-                  {GESTURE_GUIDE.map(({ action }) => {
-                    const state = done.includes(action)
-                      ? 'learned'
-                      : action === current
-                        ? 'now'
-                        : 'next';
-                    return (
-                      <li
-                        key={action}
-                        className={`tutorial__item tutorial__item--${state}`}
-                        aria-current={state === 'now' ? 'step' : undefined}
-                      >
-                        <span className="tutorial__item-icon">
-                          <Icon name={LESSONS[action].icon} />
-                        </span>
-                        <span className="tutorial__item-text">
-                          <span className="tutorial__item-name">{ACTION_LABELS[action]}</span>
-                          <span className="text-small muted">{LESSONS[action].short}</span>
-                        </span>
-                        <span className={`tutorial__badge tutorial__badge--${state}`}>
-                          {state === 'learned' ? 'Learned' : state === 'now' ? 'Now' : 'Next'}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </section>
+            <section className="panel tutorial__steps" aria-label="All gestures">
+              <ol className="tutorial__list">
+                {GESTURE_GUIDE.map(({ action }) => {
+                  const state = done.includes(action)
+                    ? 'learned'
+                    : action === current
+                      ? 'now'
+                      : 'next';
+                  return (
+                    <li
+                      key={action}
+                      className={`tutorial__item tutorial__item--${state}`}
+                      aria-current={state === 'now' ? 'step' : undefined}
+                    >
+                      <span className="tutorial__item-icon">
+                        <Icon name={LESSONS[action].icon} />
+                      </span>
+                      <span className="tutorial__item-text">
+                        <span className="tutorial__item-name">{ACTION_LABELS[action]}</span>
+                        <span className="text-small muted">{LESSONS[action].short}</span>
+                      </span>
+                      <span className={`tutorial__badge tutorial__badge--${state}`}>
+                        {state === 'learned' ? 'Learned' : state === 'now' ? 'Now' : 'Next'}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
 
-              <div className="tutorial__actions">
+            <div className="tutorial__actions">
+              {inRoom ? (
+                <Button variant="outline" onClick={onExit}>
+                  Exit practice
+                </Button>
+              ) : (
                 <Link className="btn btn--outline" to={next}>
                   Skip for now
                 </Link>
-                <button
-                  type="button"
-                  className="btn btn--lime"
-                  onClick={nextGesture}
-                  disabled={left.length < 2}
-                >
-                  Next gesture
-                </button>
-              </div>
+              )}
+              <button
+                type="button"
+                className="btn btn--lime"
+                onClick={nextGesture}
+                disabled={left.length < 2}
+              >
+                Next gesture
+              </button>
             </div>
           </div>
-        )}
-      </main>
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -286,19 +330,30 @@ function LearnedBar({ learned, total }) {
  * the gesture being held and the seconds left. Before the camera is on, or when it cannot be
  * used, the message and a way to try again take its place.
  */
-function CameraStage({ gestures, current, holdMs }) {
+function CameraStage({ gestures, previewStream, current, holdMs, retry }) {
   const message = gestureMessage(gestures, { myTurn: true });
   if (gestures.status !== 'on') {
-    return (
-      <section className="tutorial__stage tutorial__stage--off" aria-label="Your camera">
+    const notice = (
+      <>
         <p className="tutorial__stage-message" aria-live="polite">
           {message}
         </p>
         {gestures.status === 'error' && (
-          <button type="button" className="btn btn--outline" onClick={gestures.retry}>
+          <button type="button" className="btn btn--outline" onClick={retry}>
             Try again
           </button>
         )}
+      </>
+    );
+    return previewStream ? (
+      <section className="tutorial__stage">
+        <GesturePreview gestures={{ stream: previewStream }}>
+          <div className="tutorial__hold tutorial__hold--notice">{notice}</div>
+        </GesturePreview>
+      </section>
+    ) : (
+      <section className="tutorial__stage tutorial__stage--off" aria-label="Your camera">
+        {notice}
       </section>
     );
   }

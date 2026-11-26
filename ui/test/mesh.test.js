@@ -41,8 +41,8 @@ describe('connecting two players', () => {
     const { a, b } = twoPlayers();
     a.mesh.setLocalStream(fakeStream('stream-a'));
     b.mesh.setLocalStream(fakeStream('stream-b'));
-    a.mesh.setPeers(['aaa', 'bbb']);
-    b.mesh.setPeers(['aaa', 'bbb']);
+    a.mesh.setPeers({ aaa: 1, bbb: 2 });
+    b.mesh.setPeers({ aaa: 1, bbb: 2 });
 
     await vi.waitFor(() => {
       expect(a.mesh.remotes().bbb.stream?.id).toBe('stream-b');
@@ -54,8 +54,8 @@ describe('connecting two players', () => {
   it('a player with no camera still sees the others', async () => {
     const { a, b } = twoPlayers();
     b.mesh.setLocalStream(fakeStream('stream-b'));
-    a.mesh.setPeers(['bbb']); // a has no camera
-    b.mesh.setPeers(['aaa']);
+    a.mesh.setPeers({ bbb: 2 }); // a has no camera
+    b.mesh.setPeers({ aaa: 1 });
 
     await vi.waitFor(() => expect(a.mesh.remotes().bbb.stream?.id).toBe('stream-b'));
     expect(b.mesh.remotes().aaa.stream).toBeNull();
@@ -67,8 +67,8 @@ describe('connecting two players', () => {
 
   it('shares the camera that is turned on after connecting', async () => {
     const { a, b } = twoPlayers();
-    a.mesh.setPeers(['bbb']);
-    b.mesh.setPeers(['aaa']);
+    a.mesh.setPeers({ bbb: 2 });
+    b.mesh.setPeers({ aaa: 1 });
     await flush(); // the first negotiation finishes with no camera
     a.mesh.setLocalStream(fakeStream('late'));
 
@@ -78,7 +78,7 @@ describe('connecting two players', () => {
   it('does not add the same track twice', () => {
     const { mesh } = makeMesh('aaa');
     const stream = fakeStream('s');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     mesh.setLocalStream(stream);
     mesh.setLocalStream(stream);
     expect(FakePeerConnection.all[0].senders).toHaveLength(1);
@@ -86,7 +86,7 @@ describe('connecting two players', () => {
 
   it('stops sending when the camera is turned off', () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     mesh.setLocalStream(fakeStream('s'));
     mesh.setLocalStream(null);
     expect(FakePeerConnection.all[0].senders).toHaveLength(0);
@@ -96,29 +96,29 @@ describe('connecting two players', () => {
 describe('who is connected', () => {
   it('opens one connection per other player and never one to itself', () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['aaa', 'bbb', 'ccc']);
+    mesh.setPeers({ aaa: 1, bbb: 2, ccc: 3 });
     expect(FakePeerConnection.all).toHaveLength(2);
     expect(Object.keys(mesh.remotes()).sort()).toEqual(['bbb', 'ccc']);
   });
 
   it('keeps the existing connection when the list repeats a player', () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
-    mesh.setPeers(['bbb', 'ccc']);
+    mesh.setPeers({ bbb: 2 });
+    mesh.setPeers({ bbb: 2, ccc: 3 });
     expect(FakePeerConnection.all).toHaveLength(2);
   });
 
   it('closes the connection of a player who left', () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb', 'ccc']);
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2, ccc: 3 });
+    mesh.setPeers({ bbb: 2 });
     expect(FakePeerConnection.all.map((pc) => pc.closed)).toEqual([false, true]);
     expect(Object.keys(mesh.remotes())).toEqual(['bbb']);
   });
 
   it('closes everything on close()', () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb', 'ccc']);
+    mesh.setPeers({ bbb: 2, ccc: 3 });
     mesh.close();
     expect(FakePeerConnection.all.every((pc) => pc.closed)).toBe(true);
     expect(mesh.remotes()).toEqual({});
@@ -126,7 +126,7 @@ describe('who is connected', () => {
 
   it('uses public STUN only, without TURN', () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     expect(FakePeerConnection.all[0].config.iceServers).toEqual(DEFAULT_ICE_SERVERS);
     expect(JSON.stringify(DEFAULT_ICE_SERVERS)).not.toContain('turn:');
   });
@@ -135,30 +135,33 @@ describe('who is connected', () => {
 describe('signals', () => {
   it('relays my ICE candidates to the right player', () => {
     const { mesh, sent } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     FakePeerConnection.all[0].onicecandidate({ candidate: { candidate: 'c1' } });
     FakePeerConnection.all[0].onicecandidate({ candidate: null }); // end of candidates
     expect(sent).toEqual([{ to: 'bbb', data: { candidate: { candidate: 'c1' } } }]);
   });
 
-  it('adds the candidates it receives', async () => {
-    const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
-    await mesh.handleSignal('bbb', { candidate: { candidate: 'c2' } });
-    expect(FakePeerConnection.all[0].candidates).toEqual([{ candidate: 'c2' }]);
+  it('buffers ICE that arrives before the remote description', async () => {
+    const { mesh } = makeMesh('bbb');
+    mesh.setPeers({ aaa: 1 });
+    const pc = FakePeerConnection.all[0];
+    await mesh.handleSignal('aaa', { candidate: { candidate: 'c2' } });
+    expect(pc.candidates).toEqual([]);
+    await mesh.handleSignal('aaa', { description: { type: 'offer', sdp: '' } });
+    expect(pc.candidates).toEqual([{ candidate: 'c2' }]);
   });
 
-  it('connects to a player whose offer arrives before the seat list does', async () => {
+  it('ignores an offer until the server lists that peer', async () => {
     const { mesh, sent } = makeMesh('aaa');
     await mesh.handleSignal('bbb', { description: { type: 'offer', sdp: '' } });
-    expect(FakePeerConnection.all).toHaveLength(1);
-    expect(sent[0].data.description.type).toBe('answer');
+    expect(FakePeerConnection.all).toHaveLength(0);
+    expect(sent).toHaveLength(0);
   });
 
   it('does not answer someone who is not at the table', async () => {
     const { mesh, sent } = makeMesh('me');
     mesh.setLocalStream(fakeStream('mine', { audio: true }));
-    mesh.setPeers(['me', 'sofia']);
+    mesh.setPeers({ me: 1, sofia: 2 });
     await flush();
     const before = sent.length; // my offer to sofia
     await mesh.handleSignal('stranger', { description: { type: 'offer', sdp: 'x' } });
@@ -170,8 +173,8 @@ describe('signals', () => {
 
   it('stops answering a player after they leave the table', async () => {
     const { mesh, sent } = makeMesh('me');
-    mesh.setPeers(['me', 'sofia']);
-    mesh.setPeers(['me']);
+    mesh.setPeers({ me: 1, sofia: 2 });
+    mesh.setPeers({ me: 1 });
     await flush();
     const before = sent.length;
     await mesh.handleSignal('sofia', { description: { type: 'offer', sdp: '' } });
@@ -179,19 +182,23 @@ describe('signals', () => {
     expect(sent).toHaveLength(before);
   });
 
-  it('still connects to a player whose early offer was ignored, once the seats update', async () => {
+  it.each(['a', 'b'])('negotiates again after player %s reconnects', async (reconnecting) => {
     const { a, b } = twoPlayers();
     a.mesh.setLocalStream(fakeStream('stream-a'));
     b.mesh.setLocalStream(fakeStream('stream-b'));
-    b.mesh.setPeers(['aaa', 'bbb']);
-    a.mesh.setPeers(['aaa']); // a has not heard about b yet, so b's offer is ignored
+    a.mesh.setPeers({ aaa: 1, bbb: 2 });
+    b.mesh.setPeers({ aaa: 1, bbb: 2 });
     await flush();
-    expect(a.mesh.remotes().bbb).toBeUndefined();
-    a.mesh.setPeers(['aaa', 'bbb']); // now it has: a makes its own offer
+
+    const roster = reconnecting === 'a' ? { aaa: 3, bbb: 2 } : { aaa: 1, bbb: 3 };
+    (reconnecting === 'a' ? a : b).mesh.setPeers({});
+    a.mesh.setPeers(roster);
+    b.mesh.setPeers(roster);
     await vi.waitFor(() => {
       expect(a.mesh.remotes().bbb.stream?.id).toBe('stream-b');
       expect(b.mesh.remotes().aaa.stream?.id).toBe('stream-a');
     });
+    expect(FakePeerConnection.all.slice(0, 2).every((pc) => pc.closed)).toBe(true);
   });
 
   it('ignores signals from itself or without content', async () => {
@@ -205,7 +212,7 @@ describe('signals', () => {
 
   it('survives a description the browser rejects', async () => {
     const { mesh, sent } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     await flush();
     const before = sent.length; // my own offer
     FakePeerConnection.all[0].failNextRemote = true;
@@ -219,7 +226,7 @@ describe('signals', () => {
 describe('both players offering at once', () => {
   async function collide(selfId, remoteId) {
     const { mesh, sent } = makeMesh(selfId);
-    mesh.setPeers([remoteId]);
+    mesh.setPeers({ [remoteId]: 1 });
     await flush(); // I make my offer
     const pc = FakePeerConnection.all[0];
     expect(pc.signalingState).toBe('have-local-offer');
@@ -241,7 +248,7 @@ describe('both players offering at once', () => {
 
   it('the impolite player also ignores candidates that belong to the ignored offer', async () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     await flush();
     const pc = FakePeerConnection.all[0];
     await mesh.handleSignal('bbb', { description: { type: 'offer', sdp: '' } });
@@ -255,7 +262,7 @@ describe('both players offering at once', () => {
 describe('connection state', () => {
   it('reports the state and tries again when the connection fails', () => {
     const { mesh, onChange } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     const pc = FakePeerConnection.all[0];
     pc.setState('connected');
     expect(mesh.remotes().bbb.state).toBe('connected');
@@ -267,7 +274,7 @@ describe('connection state', () => {
 
   it('does not break when negotiation fails to start', async () => {
     const { mesh } = makeMesh('aaa');
-    mesh.setPeers(['bbb']);
+    mesh.setPeers({ bbb: 2 });
     const pc = FakePeerConnection.all[0];
     pc.setLocalDescription = async () => {
       throw new Error('nope');

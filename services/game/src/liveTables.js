@@ -140,13 +140,14 @@ export function createLiveTables({
 
   // What the players see: the "state" message for everyone and the "private" one for a player.
   const timerEndsAt = (entry) => entry.turn?.endsAt ?? null;
-  const stateOf = (entry) => publicState(entry.game, { timerEndsAt: timerEndsAt(entry) });
+  const stateOptions = (entry) => ({ timerEndsAt: timerEndsAt(entry), paused: entry.paused });
+  const stateOf = (entry) => publicState(entry.game, stateOptions(entry));
 
   // Called after every change to the engine state: tells the listeners (the WebSocket), saves a
   // hand that just ended, or schedules the next one.
   async function afterChange(entry) {
     updateTurnTimer(entry);
-    onChange(entry.id, entry.game, { timerEndsAt: timerEndsAt(entry) });
+    onChange(entry.id, entry.game, stateOptions(entry));
     if (unsaved(entry)) await saveHand(entry);
     else scheduleNextHand(entry);
   }

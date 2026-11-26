@@ -46,10 +46,10 @@ function TableStub() {
 
 function renderLobby() {
   return render(
-    <MemoryRouter initialEntries={['/lobby']}>
+    <MemoryRouter initialEntries={['/menu']}>
       <Routes>
         <Route path="/" element={<h1>Create your player</h1>} />
-        <Route path="/lobby" element={<LobbyPage />} />
+        <Route path="/menu" element={<LobbyPage />} />
         <Route path="/tables/:code" element={<TableStub />} />
       </Routes>
     </MemoryRouter>,

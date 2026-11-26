@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router';
 import { gameApi } from '../api/gameApi.js';
 import { ApiError } from '../api/http.js';
 import { playerColour } from '../components/Avatar.jsx';
 import { Button } from '../components/Button.jsx';
 import { formatChips } from '../components/Chips.jsx';
+import { Icon } from '../components/Icon.jsx';
 import { TopBar } from '../components/TopBar.jsx';
 import { isCompleteCode, normalizeCode } from '../tableCode.js';
 import { isPlayerGone, usePlayer } from '../usePlayer.js';
 import { useTableSocket } from '../table/useTableSocket.js';
-import { tutorialDone } from '../../gestures/GestureTutorial.jsx';
+import { GesturePractice, tutorialDone } from '../../gestures/GestureTutorial.jsx';
 import { VideoTile } from '../../video/VideoTile.jsx';
 import { useVideo } from '../../video/useVideo.js';
 import './WaitingRoomPage.css';
 
-// How often the seats are refreshed, and how players who are not the host find out that the
-// game has started (the table's `paused` turns false).
+// Refresh table settings and fall back to HTTP when live updates are unavailable.
 export const POLL_MS = 3000;
 const MIN_PLAYERS = 2;
 
@@ -29,6 +29,7 @@ const MIN_PLAYERS = 2;
  */
 export function WaitingRoomPage({ pollMs = POLL_MS }) {
   const code = normalizeCode(useParams().code);
+  const navigate = useNavigate();
   const { playerId, player, startOver } = usePlayer();
 
   // status: joining | seated | notFound | full | unavailable
@@ -76,20 +77,14 @@ export function WaitingRoomPage({ pollMs = POLL_MS }) {
     return () => clearInterval(timer);
   }, [status, code, pollMs]);
 
-  // Only the host can start, but everyone follows: on the start response, or on the next refresh.
   async function startGame() {
-    const latest = await gameApi.startTable(code, playerId);
-    setTable({ ...latest, paused: false });
-  }
-
-  // `=== false`, not `!paused`: a table without the field (older game service) never moves on.
-  if (status === 'seated' && table?.paused === false) {
-    return <Navigate to={`/tables/${code}/play`} replace />;
+    await gameApi.startTable(code, playerId);
+    navigate(`/tables/${code}/play`, { replace: true });
   }
 
   return (
     <div className="waiting">
-      <TopBar player={player} />
+      <TopBar player={player} showMainMenu />
       <main className="waiting__main">
         {status === 'seated' ? (
           <Room
@@ -138,16 +133,11 @@ function Problem({ status, code, onRetry }) {
       {code && <p className="label">Table {code}</p>}
       <h1>{title}</h1>
       {text && <p className="muted">{text}</p>}
-      {status !== 'joining' && (
-        <div className="row" style={{ gap: 'var(--space-3)' }}>
-          {status === 'unavailable' && (
-            <Button variant="ink" onClick={onRetry}>
-              Try again
-            </Button>
-          )}
-          <Link className="btn btn--outline" to="/lobby">
-            Back to lobby
-          </Link>
+      {status === 'unavailable' && (
+        <div>
+          <Button variant="ink" onClick={onRetry}>
+            Try again
+          </Button>
         </div>
       )}
     </section>
@@ -157,47 +147,55 @@ function Problem({ status, code, onRetry }) {
 function Room({ code, table, playerId, player, stale, onStart }) {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null);
+  const [practice, setPractice] = useState('idle');
+  const practiceButton = useRef(null);
+  const practising = practice === 'active';
+
+  useEffect(() => {
+    if (practice === 'complete' || practice === 'exited') practiceButton.current?.focus();
+  }, [practice]);
+  const { state, connection, send, onVideo } = useTableSocket(code, playerId);
+  const video = useVideo({ playerId, send, onVideo });
+  const live = connection === 'open' ? state : null;
+  const occupied = live?.seats ?? table.seats;
   const seats = Array.from(
     { length: table.maxSeats },
-    (_, index) => table.seats.find((seat) => seat.seatIndex === index) ?? null,
+    (_, index) => occupied.find((seat) => (seat.seat ?? seat.seatIndex) === index) ?? null,
   );
-  const taken = table.seats.length;
-  const host = table.seats.find((seat) => seat.playerId === table.createdBy);
+  const taken = occupied.length;
+  const ready = occupied.filter((seat) => seat.stack > 0).length >= MIN_PLAYERS;
+  const host = occupied.find((seat) => seat.playerId === table.createdBy);
   const isHost = table.createdBy === playerId;
   const hostName = isHost ? 'You' : (host?.name ?? 'The host');
 
-  // Faces and voices from the waiting room on, between the players seated here (ui/video/). The
-  // table socket is only used to relay the video signals. Once the game starts the table page
-  // opens its own, so the picture blinks for a moment when moving there.
-  const { send, onSignal } = useTableSocket(code, playerId);
-  const video = useVideo({
-    playerId,
-    peerIds: table.seats.map((seat) => seat.playerId),
-    send,
-    onSignal,
-  });
+  if ((live?.paused ?? table.paused) === false) {
+    return <Navigate to={`/tables/${code}/play`} replace />;
+  }
 
   return (
     <>
-      <div className="waiting__head">
-        <div className="stack" style={{ gap: 'var(--space-2)' }}>
-          <Link className="waiting__back" to="/lobby">
-            ← Back to lobby
-          </Link>
-          <h1>Waiting room</h1>
+      <header className="waiting__head">
+        <div className="waiting__title">
+          <h1>Table lobby</h1>
           <p className="muted">
-            Waiting for players · {taken} of {table.maxSeats} seats taken
+            {taken} of {table.maxSeats} seats taken
           </p>
         </div>
-        <div className="stack" style={{ gap: 'var(--space-3)', alignItems: 'flex-end' }}>
+        <div className="waiting__tools">
           <InviteCard code={code} />
           {video.hasMic && (
-            <Button variant="outline" onClick={video.toggleMic} aria-pressed={!video.micOn}>
-              {video.micOn ? 'Mute microphone' : 'Unmute microphone'}
+            <Button
+              className="waiting__mic"
+              onClick={video.toggleMic}
+              aria-label="Mute microphone"
+              aria-pressed={!video.micOn}
+              title={video.micOn ? 'Mute microphone' : 'Unmute microphone'}
+            >
+              <Icon name={video.micOn ? 'mic' : 'micOff'} />
             </Button>
           )}
         </div>
-      </div>
+      </header>
 
       {stale && (
         <div className="banner" role="status">
@@ -205,97 +203,113 @@ function Room({ code, table, playerId, player, stale, onStart }) {
         </div>
       )}
 
-      <div className="waiting__grid">
-        <ol className="waiting__seats" aria-label="Seats">
-          {seats.map((seat, index) => (
-            <SeatTile
-              key={index}
-              seat={seat}
-              isYou={seat?.playerId === playerId}
-              isHost={seat?.playerId === table.createdBy}
-              video={video}
-              colour={
-                seat?.playerId === playerId && player ? player.avatar : (seat?.playerId ?? index)
-              }
-            />
-          ))}
+      <div className={practising ? 'waiting__grid waiting__grid--practice' : 'waiting__grid'}>
+        <ol className="waiting__seats" aria-label={practising ? 'Other players' : 'Seats'}>
+          {seats.map((seat, index) =>
+            practising && (!seat || seat.playerId === playerId) ? null : (
+              <SeatTile
+                key={index}
+                seat={seat}
+                isYou={seat?.playerId === playerId}
+                isHost={seat?.playerId === table.createdBy}
+                video={video}
+                colour={
+                  seat?.playerId === playerId && player ? player.avatar : (seat?.playerId ?? index)
+                }
+              />
+            ),
+          )}
         </ol>
 
-        <aside className="waiting__side">
-          <section className="panel waiting__settings" aria-labelledby="waiting-settings">
-            <h2 id="waiting-settings">Table settings</h2>
-            <dl>
-              <div>
-                <dt className="muted">Blinds</dt>
-                <dd>
-                  {formatChips(table.smallBlind)} / {formatChips(table.bigBlind)}
-                </dd>
-              </div>
-              <div>
-                <dt className="muted">Starting stack</dt>
-                <dd>{formatChips(table.startingStack)}</dd>
-              </div>
-              <div>
-                <dt className="muted">Seats</dt>
-                <dd>{table.maxSeats}</dd>
-              </div>
-              <div>
-                <dt className="muted">Host</dt>
-                <dd>{isHost ? `${host?.name ?? 'You'} (you)` : hostName}</dd>
-              </div>
-            </dl>
-          </section>
+        {practising ? (
+          <GesturePractice
+            player={player}
+            video={video}
+            onExit={() => setPractice('exited')}
+            onComplete={() => setPractice('complete')}
+          />
+        ) : (
+          <aside className="waiting__side">
+            <section className="panel waiting__settings" aria-labelledby="waiting-settings">
+              <h2 id="waiting-settings">Table settings</h2>
+              <dl>
+                <div>
+                  <dt className="muted">Blinds</dt>
+                  <dd>
+                    {formatChips(table.smallBlind)} / {formatChips(table.bigBlind)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="muted">Starting stack</dt>
+                  <dd>{formatChips(table.startingStack)}</dd>
+                </div>
+                <div>
+                  <dt className="muted">Seats</dt>
+                  <dd>{table.maxSeats}</dd>
+                </div>
+                <div>
+                  <dt className="muted">Host</dt>
+                  <dd>{isHost ? `${host?.name ?? 'You'} (you)` : hostName}</dd>
+                </div>
+              </dl>
+            </section>
 
-          <section className="panel waiting__tutorial" aria-labelledby="waiting-tutorial">
-            <h2 id="waiting-tutorial">Gestures</h2>
-            <p className="text-small muted">
-              {tutorialDone()
-                ? 'Want a refresher before the game?'
-                : 'New to gestures? Try each one with your camera before the game starts.'}
-            </p>
-            <Link
-              className="btn btn--outline"
-              to={`/tutorial?next=${encodeURIComponent(`/tables/${code}`)}`}
-            >
-              Practise gestures
-            </Link>
-          </section>
-
-          {isHost ? (
-            <div className="stack waiting__start">
+            <section className="panel waiting__tutorial" aria-labelledby="waiting-tutorial">
+              <h2 id="waiting-tutorial">Gestures</h2>
+              <p className="text-small muted" id="waiting-gesture-status" role="status">
+                {practice === 'complete'
+                  ? 'All five gestures learned.'
+                  : tutorialDone()
+                    ? 'Want a refresher before the game?'
+                    : 'New to gestures? Try each one with your camera before the game starts.'}
+              </p>
               <Button
-                variant="lime"
-                size="hero"
-                block
-                disabled={taken < MIN_PLAYERS || starting}
-                onClick={async () => {
-                  setStarting(true);
-                  setStartError(null);
-                  try {
-                    await onStart(); // On success this page moves to the table.
-                  } catch (err) {
-                    setStartError(err instanceof ApiError ? err.message : 'Tables unavailable');
-                    setStarting(false);
-                  }
-                }}
+                ref={practiceButton}
+                aria-describedby="waiting-gesture-status"
+                onClick={() => setPractice('active')}
               >
-                {starting ? 'Starting…' : 'Start game'}
+                Practise gestures
               </Button>
-              {startError && (
-                <p className="field__error" role="alert">
-                  {startError}
-                </p>
-              )}
-              {taken < MIN_PLAYERS && (
-                <p className="text-small muted">
-                  You need at least {MIN_PLAYERS} players to start.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="panel waiting__host-note">Waiting for {hostName} to start the game.</p>
-          )}
-        </aside>
+            </section>
+
+            {isHost ? (
+              <div className="stack waiting__start">
+                <Button
+                  variant="lime"
+                  size="hero"
+                  block
+                  disabled={!ready || starting}
+                  onClick={async () => {
+                    setStarting(true);
+                    setStartError(null);
+                    try {
+                      await onStart(); // On success this page moves to the table.
+                    } catch (err) {
+                      setStartError(err instanceof ApiError ? err.message : 'Tables unavailable');
+                      setStarting(false);
+                    }
+                  }}
+                >
+                  {starting ? 'Starting…' : 'Start game'}
+                </Button>
+                {startError && (
+                  <p className="field__error" role="alert">
+                    {startError}
+                  </p>
+                )}
+                {!ready && (
+                  <p className="text-small muted">
+                    {taken < MIN_PLAYERS
+                      ? 'You need at least 2 players to start.'
+                      : 'At least two players need chips to start a hand.'}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="panel waiting__host-note">Waiting for {hostName} to start the game.</p>
+            )}
+          </aside>
+        )}
       </div>
     </>
   );

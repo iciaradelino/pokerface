@@ -24,9 +24,23 @@ export class ApiError extends Error {
 
 const SERVICE_NAMES = { players: 'Player service', game: 'Tables' };
 
-export function waitForStartup(service, baseUrl) {
-  if (config.startupTimeoutMs === undefined) return;
-  return request(service, baseUrl, '/health', { timeoutMs: config.startupTimeoutMs });
+export async function waitForStartup(service, baseUrl) {
+  const { startupTimeoutMs } = config;
+  if (startupTimeoutMs === undefined) return;
+
+  const deadline = performance.now() + startupTimeoutMs;
+  const retryDelayMs = 3000;
+  let remainingMs = startupTimeoutMs;
+  for (;;) {
+    try {
+      return await request(service, baseUrl, '/health', { timeoutMs: remainingMs });
+    } catch (error) {
+      if (error.status !== 503 || deadline - performance.now() <= retryDelayMs) throw error;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      remainingMs = Math.floor(deadline - performance.now());
+      if (remainingMs <= 0) throw error;
+    }
+  }
 }
 
 export async function request(

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { gameApi } from '../api/gameApi.js';
 
 const RETRY_MS = [1000, 2000, 4000, 8000];
-const MAX_PENDING_SIGNALS = 50;
 
 /**
  * Close codes from the game service (services/game/src/tableSockets.js) that mean trying again
@@ -12,7 +11,7 @@ export const FINAL_CLOSE_CODES = new Set([4400, 4403, 4404]);
 
 /**
  * Live table updates over the game service WebSocket (plan.md §6).
- * Returns { state, mine, connection, closeCode, send, onSignal }:
+ * Returns { state, mine, connection, closeCode, send, onVideo }:
  *   state       last "state" message (same for everyone), or null before the first one
  *   mine        last "private" message (your cards and legal actions), or null
  *   connection  "connecting" | "open" | "reconnecting" | "closed"
@@ -20,13 +19,8 @@ export const FINAL_CLOSE_CODES = new Set([4400, 4403, 4404]);
  * If the socket drops it reconnects after 1, 2, 4 then every 8 seconds; the server sends the
  * full state again on connect, so nothing is lost. It stops for good on a FINAL_CLOSE_CODES
  * close.
- * Also for video (ui/video/):
- *   send(to, data)     sends a "signal" to another player at the table. While the socket is not
- *                      open it is kept and sent on open; the queue is emptied when the socket
- *                      closes for good or the hook stops.
- *   onSignal(listener) calls listener(from, data) for each signal that arrives and returns an
- *                      unsubscribe function.
- * Both keep the same identity for the whole visit, as useVideo needs.
+ * Video uses the admitted socket list, which the server sends before relaying signals.
+ * onVideo(listener) reports roster changes and incoming signals in wire order.
  */
 export function useTableSocket(code, playerId) {
   const [state, setState] = useState(null);
@@ -36,21 +30,22 @@ export function useTableSocket(code, playerId) {
   const socketRef = useRef(null);
   const listenersRef = useRef(new Set());
 
-  const pendingRef = useRef([]); // signals made while the socket was not open
+  const rosterRef = useRef({});
 
-  const send = useCallback((to, data) => {
-    const text = JSON.stringify({ type: 'signal', to, data });
+  const send = useCallback((to, data, toConnection) => {
     const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) socket.send(text);
-    // The seats arrive over HTTP before the socket opens, so the first offers are made too
-    // early. Keep them (a few) and send them on open instead of losing the call. Also kept while
-    // reconnecting: a late offer is better than none, because a lost one would leave that
-    // connection waiting for an answer for good (the other side's mesh handles late offers).
-    else if (pendingRef.current.length < MAX_PENDING_SIGNALS) pendingRef.current.push(text);
+    if (
+      socket?.readyState === WebSocket.OPEN &&
+      toConnection != null &&
+      rosterRef.current[to] === toConnection
+    ) {
+      socket.send(JSON.stringify({ type: 'signal', to, toConnection, data }));
+    }
   }, []);
 
-  const onSignal = useCallback((listener) => {
+  const onVideo = useCallback((listener) => {
     listenersRef.current.add(listener);
+    listener({ type: 'video-peers', peers: rosterRef.current });
     return () => listenersRef.current.delete(listener);
   }, []);
 
@@ -60,31 +55,46 @@ export function useTableSocket(code, playerId) {
     let attempt = 0;
     let closed = false;
 
+    function updateRoster(peers) {
+      rosterRef.current = peers;
+      for (const listener of listenersRef.current) listener({ type: 'video-peers', peers });
+    }
+
     function connect() {
-      socket = new WebSocket(gameApi.socketUrl(code, playerId));
-      socketRef.current = socket;
-      socket.onopen = () => {
-        attempt = 0;
-        for (const text of pendingRef.current.splice(0)) socket.send(text);
-        setConnection('open');
-      };
-      socket.onmessage = (event) => {
+      const ws = new WebSocket(gameApi.socketUrl(code, playerId));
+      socket = ws;
+      socketRef.current = ws;
+      ws.onmessage = (event) => {
+        if (closed || socket !== ws) return;
         let message;
         try {
           message = JSON.parse(event.data);
         } catch {
-          return; // Not JSON: ignore rather than break the table.
+          return;
         }
-        if (message?.type === 'state') setState(message);
-        else if (message?.type === 'private' && message.playerId === playerId) setMine(message);
-        else if (message?.type === 'signal' && typeof message.from === 'string') {
-          for (const listener of listenersRef.current) listener(message.from, message.data);
+        if (message?.type === 'state') {
+          setState(message);
+          setConnection('open');
+          attempt = 0;
+        } else if (message?.type === 'private' && message.playerId === playerId) {
+          setMine(message);
+        } else if (message?.type === 'video-peers' && message.peers) {
+          updateRoster(message.peers);
+        } else if (
+          message?.type === 'signal' &&
+          typeof message.from === 'string' &&
+          message.fromConnection != null &&
+          rosterRef.current[message.from] === message.fromConnection
+        ) {
+          for (const listener of listenersRef.current) listener(message);
         }
       };
-      socket.onclose = (event) => {
-        if (closed) return;
+      ws.onclose = (event) => {
+        if (closed || socket !== ws) return;
+        socket = null;
+        socketRef.current = null;
+        updateRoster({});
         if (FINAL_CLOSE_CODES.has(event?.code)) {
-          pendingRef.current = []; // nobody will ever read them
           setCloseCode(event.code);
           setConnection('closed');
           return;
@@ -101,9 +111,9 @@ export function useTableSocket(code, playerId) {
       clearTimeout(retryTimer);
       socket?.close();
       socketRef.current = null;
-      pendingRef.current = []; // they belonged to the table I am leaving
+      updateRoster({});
     };
   }, [code, playerId]);
 
-  return { state, mine, connection, closeCode, send, onSignal };
+  return { state, mine, connection, closeCode, send, onVideo };
 }

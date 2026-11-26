@@ -8,8 +8,14 @@
   background: var(--color-surface);
 }
 
+.top-bar__nav,
 .top-bar__me {
   gap: var(--space-3);
+}
+
+.btn.top-bar__main-menu {
+  padding-inline: var(--space-3);
+  font-size: var(--text-small);
 }
 
 .top-bar__chip {
@@ -95,7 +101,12 @@
 
 @media (max-width: 720px) {
   .top-bar {
+    gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
+  }
+
+  .top-bar__nav {
+    gap: var(--space-2);
   }
 
   /* Only the avatar stays; the lobby shows the chips on the profile card */
