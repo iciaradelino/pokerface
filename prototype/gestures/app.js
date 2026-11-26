@@ -9,12 +9,10 @@ const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
 
 // Tuning knobs
-const HOLD_MS = 1000;          // hold time for call / fold / all-in
+const HOLD_MS = 1000;          // hold time for check / call / fold / all-in
 const RAISE_CONFIRM_MS = 600;  // fist hold time to confirm a raise
 const COOLDOWN_MS = 1200;      // pause after an action fires
 const MIN_SCORE = 0.6;         // min classifier confidence for built-in gestures
-const TAP_AMPLITUDE = 0.35;    // check: knock depth, relative to hand size
-const DOUBLE_TAP_MS = 900;     // check: max time between the two knocks
 const RAISE_TIMEOUT_MS = 1500; // raise mode ends if no palm/fist for this long
 
 // Fake table numbers for the raise meter
@@ -42,7 +40,6 @@ let fps = 0;
 let hold = { action: null, start: 0 };
 let cooldownUntil = 0;
 let raise = { active: false, amount: MIN_RAISE, lastSeen: 0 };
-let tap = { phase: "up", extreme: null, taps: [] };
 
 // Evaluation state
 const stats = Object.fromEntries(ACTIONS.map((a) => [a, { fired: 0, correct: 0, wrong: 0, missed: 0 }]));
@@ -121,7 +118,12 @@ function update(hands, now) {
   if (hands.length >= 1) {
     const h = hands[0];
 
-    if (confident(h, "ILoveYou")) {
+    if (confident(h, "Victory")) {
+      // Check: the ✌️ sign, held. Knocking twice was often missed, because a blurred frame
+      // lost the hand and the knocks started over.
+      candidate = "check";
+      raise.active = false;
+    } else if (confident(h, "ILoveYou")) {
       // All-in: the 🤟 sign. Two open palms was too often read as a raise.
       candidate = "allin";
       raise.active = false;
@@ -141,20 +143,10 @@ function update(hands, now) {
       candidate = "raise";
       holdMs = RAISE_CONFIRM_MS;
       raise.lastSeen = now;
+    } else if (peaceShape(h.lm)) {
+      // ✌️ with the back of the hand: MediaPipe rarely says "Victory", but the joints show it.
+      candidate = "check";
     }
-
-    // Knocking: three back fingers curled (fist or pointing). Not while raising or thumbs up/down.
-    const thumb = confident(h, "Thumb_Up") || confident(h, "Thumb_Down");
-    if (!candidate && !raise.active && !thumb && backFingersCurled(h.lm)) {
-      if (detectDoubleTap(h.lm, now)) {
-        fire("check", now);
-        return null;
-      }
-    } else {
-      resetTap();
-    }
-  } else {
-    resetTap();
   }
 
   if (raise.active && now - raise.lastSeen > RAISE_TIMEOUT_MS) raise.active = false;
@@ -173,37 +165,10 @@ function update(hands, now) {
   return progress;
 }
 
-// Tracks the index fingertip going down then up; two such knocks in a row = check.
-function detectDoubleTap(lm, now) {
-  const y = lm[8].y;
-  const amp = TAP_AMPLITUDE * handSize(lm);
-
-  if (tap.extreme === null) tap.extreme = y;
-  if (tap.phase === "up") {
-    tap.extreme = Math.min(tap.extreme, y); // highest point so far
-    if (y > tap.extreme + amp) {
-      tap.phase = "down";
-      tap.extreme = y;
-    }
-  } else {
-    tap.extreme = Math.max(tap.extreme, y); // lowest point so far
-    if (y < tap.extreme - amp) {
-      tap.phase = "up";
-      tap.extreme = y;
-      tap.taps.push(now);
-    }
-  }
-  tap.taps = tap.taps.filter((t) => now - t <= DOUBLE_TAP_MS);
-  return tap.taps.length >= 2;
-}
-
-function backFingersCurled(lm) {
-  // middle, ring, pinky: tip closer to the wrist than the PIP joint
-  return [[12, 10], [16, 14], [20, 18]].every(([tip, pip]) => dist(lm[tip], lm[0]) < dist(lm[pip], lm[0]));
-}
-
-function handSize(lm) {
-  return dist(lm[0], lm[9]);
+// ✌️ from the finger joints, either side of the hand: index and middle out, ring and little in.
+function peaceShape(lm) {
+  const reach = (joint, tip) => dist(lm[tip], lm[0]) / dist(lm[joint], lm[0]);
+  return reach(6, 8) > 1.2 && reach(10, 12) > 1.2 && reach(14, 16) < 1 && reach(18, 20) < 1;
 }
 
 function dist(a, b) {
@@ -218,15 +183,10 @@ function resetHold() {
   hold = { action: null, start: 0 };
 }
 
-function resetTap() {
-  tap = { phase: "up", extreme: null, taps: [] };
-}
-
 function fire(action, now) {
   const detail = action === "raise" ? raise.amount : null;
   cooldownUntil = now + COOLDOWN_MS;
   resetHold();
-  resetTap();
   raise.active = false;
 
   stats[action].fired++;
@@ -289,9 +249,9 @@ function render(hands, progress, now) {
   // Debug panel
   const lines = hands.map(
     (hd, i) => `Hand ${i + 1} (${hd.side}): ${hd.gesture} ${(hd.score * 100).toFixed(0)}%` +
-      (backFingersCurled(hd.lm) ? " · knock-ready" : "")
+      (peaceShape(hd.lm) ? " · ✌️ shape" : "")
   );
-  lines.push(`Knocks: ${tap.taps.length} · FPS: ${fps}`);
+  lines.push(`FPS: ${fps}`);
   if (now < cooldownUntil) lines.push("Cooldown…");
   $("debug").textContent = hands.length ? lines.join("\n") : `No hands · FPS: ${fps}`;
 }

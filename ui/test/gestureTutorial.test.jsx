@@ -37,7 +37,6 @@ function frames(...handsPerFrame) {
 const hold = (hands, ms) => frames(...Array.from({ length: ms / 50 }, () => hands));
 /** Waits out the pause after a gesture fires, with no hand in view. */
 const rest = () => hold([], 1500);
-const knock = (tipY) => [hand('Closed_Fist', { curled: true, tipY })];
 
 const json = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -99,7 +98,7 @@ describe('gesture tutorial', () => {
     expect(practising()).toHaveTextContent('Check');
     expect(badgeOf('Check')).toHaveTextContent('Now');
 
-    frames(knock(0.4), knock(0.5), knock(0.4), knock(0.5), knock(0.4));
+    hold([hand('Victory')], 1100); // ✌️ check
     expect(screen.getByRole('status')).toHaveTextContent('✓ Check recognised.');
     expect(practising()).toHaveTextContent('Call');
     expect(badgeOf('Check')).toHaveTextContent('Learned');
@@ -311,7 +310,7 @@ describe('gesture practice in the waiting room', () => {
     await screen.findByText('No hand in view');
     const socket = FakeSocket.latest;
 
-    frames(knock(0.4), knock(0.5), knock(0.4), knock(0.5), knock(0.4));
+    hold([hand('Victory')], 1100); // ✌️ check
     rest();
     hold([hand('Thumb_Up')], 1100);
     rest();

@@ -3,21 +3,19 @@
 //
 // A "hand" is { landmarks, gesture, score }:
 //   landmarks  21 points { x, y } from MediaPipe, 0..1 of the picture (y grows downwards)
-//   gesture    MediaPipe's label: Thumb_Up, Thumb_Down, Open_Palm, Closed_Fist, ILoveYou, ...
+//   gesture    MediaPipe's label: Victory, Thumb_Up, Thumb_Down, Open_Palm, Closed_Fist, ILoveYou, ...
 // Only the first hand is used, so one hand plays every action.
 //   score      how sure MediaPipe is about the label, 0..1
 
 export const TIMING = {
-  holdMs: 1000, // call, fold and all-in must be held this long
+  holdMs: 1000, // check, call, fold and all-in must be held this long
   raiseConfirmMs: 600, // the fist that confirms a raise
   cooldownMs: 1200, // nothing fires right after an action
   graceMs: 250, // a gesture lost for a frame or two keeps its progress
-  doubleTapMs: 900, // check: most time between the two knocks
   raiseTimeoutMs: 1500, // raise mode ends when no palm or fist is seen for this long
 };
 
 export const MIN_SCORE = 0.6;
-const TAP_AMPLITUDE = 0.35; // knock depth, relative to the size of the hand
 
 // Palm height that maps to the smallest and the largest raise (0 is the top of the picture).
 const RAISE_LOW_Y = 0.85;
@@ -53,17 +51,6 @@ export function raiseAmountAt(y, { minRaise, maxRaise, step = 1 }) {
   return clamp(rounded, minRaise, maxRaise);
 }
 
-/** Middle, ring and little finger curled: the fingertip is closer to the wrist than its joint. */
-export function backFingersCurled(landmarks) {
-  return [
-    [12, 10],
-    [16, 14],
-    [20, 18],
-  ].every(
-    ([tip, joint]) => dist(landmarks[tip], landmarks[0]) < dist(landmarks[joint], landmarks[0]),
-  );
-}
-
 const IDLE = Object.freeze({
   action: null,
   progress: 0,
@@ -76,7 +63,7 @@ const IDLE = Object.freeze({
 /**
  * Returns a detector with update(hands, now, turn) and reset(). Call update once per video
  * frame; `now` is in milliseconds. It returns:
- *   action       the gesture being held ("call", "fold", "raise" or "allin"), or null
+ *   action       the gesture being held ("check", "call", "fold", "raise" or "allin"), or null
  *   progress     how far the hold is, 0..1
  *   raising      true while an open palm is choosing a raise amount
  *   raiseAmount  the amount the palm points at (while raising), or null
@@ -88,12 +75,10 @@ export function createDetector(timing = TIMING) {
   let hold = null; // { action, start, lastSeen }
   let cooldownUntil = 0;
   let raise = null; // { amount, lastSeen }
-  let tap = freshTap();
 
   function reset() {
     hold = null;
     raise = null;
-    tap = freshTap();
   }
 
   function fire(action, now) {
@@ -121,9 +106,13 @@ export function createDetector(timing = TIMING) {
 
     if (hands.length >= 1) {
       const hand = hands[0];
-      const thumb = sure(hand, 'Thumb_Up') || sure(hand, 'Thumb_Down');
 
-      if (sure(hand, 'ILoveYou')) {
+      if (sure(hand, 'Victory')) {
+        // Check is the ✌️ sign, held like the others. It used to be knocking twice, but a moving
+        // gesture was often missed: a blurred frame lost the hand and the knocks started over.
+        raise = null;
+        if (legal.has('check')) candidate = 'check';
+      } else if (sure(hand, 'ILoveYou')) {
         // All-in is the 🤟 sign (thumb, index and little finger out). It used to be two open
         // palms, but that starts with one open palm, so it was often read as a raise.
         raise = null;
@@ -139,22 +128,12 @@ export function createDetector(timing = TIMING) {
         candidate = 'raise';
         holdMs = timing.raiseConfirmMs;
         raise.lastSeen = now;
+      } else if (peaceShape(hand.landmarks)) {
+        // MediaPipe's model mostly knows ✌️ with the palm to the camera. From the back of the hand
+        // it rarely says "Victory", but the finger joints still show the shape, so check works
+        // either way. A raise being chosen is kept: a fist closing can pass through this shape.
+        if (legal.has('check')) candidate = 'check';
       }
-
-      // Knocking twice with a fist or a pointing finger checks. Not while choosing a raise.
-      if (
-        !candidate &&
-        !raise &&
-        !thumb &&
-        legal.has('check') &&
-        backFingersCurled(hand.landmarks)
-      ) {
-        if (knockedTwice(hand.landmarks, now)) return fire('check', now);
-      } else {
-        tap = freshTap();
-      }
-    } else {
-      tap = freshTap();
     }
 
     if (raise && now - raise.lastSeen > timing.raiseTimeoutMs) raise = null;
@@ -176,28 +155,25 @@ export function createDetector(timing = TIMING) {
     return { ...IDLE, ...raiseView, action: candidate, progress: hold.progress };
   }
 
-  // Follows the index fingertip: down by a knock's depth, then back up, counts as one knock.
-  function knockedTwice(landmarks, now) {
-    const y = landmarks[8].y;
-    const depth = TAP_AMPLITUDE * dist(landmarks[0], landmarks[9]);
-    if (tap.extreme === null) tap.extreme = y;
-    if (tap.phase === 'up') {
-      tap.extreme = Math.min(tap.extreme, y);
-      if (y > tap.extreme + depth) tap = { ...tap, phase: 'down', extreme: y };
-    } else {
-      tap.extreme = Math.max(tap.extreme, y);
-      if (y < tap.extreme - depth)
-        tap = { ...tap, phase: 'up', extreme: y, taps: [...tap.taps, now] };
-    }
-    tap.taps = tap.taps.filter((t) => now - t <= timing.doubleTapMs);
-    return tap.taps.length >= 2;
-  }
-
   return { update, reset };
 }
 
-function freshTap() {
-  return { phase: 'up', extreme: null, taps: [] };
+// Finger joints from MediaPipe's hand landmarks: [middle joint, fingertip].
+const INDEX = [6, 8];
+const MIDDLE = [10, 12];
+const RING = [14, 16];
+const LITTLE = [18, 20];
+
+/**
+ * ✌️ from the finger joints alone, whichever side of the hand faces the camera: index and middle
+ * finger stretched out (the tip well past its middle joint, seen from the wrist), ring and little
+ * finger folded in (the tip closer to the wrist than its middle joint). The thumb can be anywhere.
+ */
+export function peaceShape(landmarks) {
+  if (!landmarks || landmarks.length < 21) return false;
+  const reach = ([joint, tip]) =>
+    dist(landmarks[tip], landmarks[0]) / dist(landmarks[joint], landmarks[0]);
+  return reach(INDEX) > 1.2 && reach(MIDDLE) > 1.2 && reach(RING) < 1 && reach(LITTLE) < 1;
 }
 
 function dist(a, b) {

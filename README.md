@@ -107,7 +107,7 @@ See the [architecture guide](docs/architecture.md) for code locations, plus our 
 
 | Action    | Gesture                          | Real-table equivalent      |
 |-----------|----------------------------------|----------------------------|
-| Check     | Tap index finger down twice ✊   | Knocking on the table      |
+| Check     | Peace sign ✌️                    | Knocking on the table      |
 | Call      | Thumbs up 👍                     | Nod / push chips           |
 | Fold      | Thumbs down 👎                   | Mucking cards              |
 | Raise     | Open palm, raise hand up/down to set amount, fist to confirm ✋ | Sliding chips forward |
