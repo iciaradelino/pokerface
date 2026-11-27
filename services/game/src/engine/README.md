@@ -88,7 +88,7 @@ Examples: `"As"` ace of spades, `"Td"` ten of diamonds.
 | Gesture             | Action                               |
 | ------------------- | ------------------------------------ |
 | Fold (thumbs down)  | `{ "type": "fold" }`                 |
-| Check (double tap)  | `{ "type": "check" }`                |
+| Check (peace sign)  | `{ "type": "check" }`                |
 | Call (thumbs up)    | `{ "type": "call" }`                 |
 | Raise (palm + fist) | `{ "type": "raise", "amount": 120 }` |
 | All-in (both hands) | `{ "type": "allIn" }`                |

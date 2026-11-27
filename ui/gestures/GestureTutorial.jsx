@@ -66,9 +66,10 @@ const describe = (action, amount) =>
  */
 export const LESSONS = {
   check: {
-    icon: 'knock',
-    short: 'Knock twice',
-    explain: () => 'Knock twice with a fist or a finger to pass without betting.',
+    icon: 'peace',
+    short: 'Peace sign',
+    explain: (hold) =>
+      `Show a peace sign (index and middle finger up, palm or back of the hand) and hold it for ${hold} to pass without betting.`,
     realTable: 'tapping the table',
   },
   call: {

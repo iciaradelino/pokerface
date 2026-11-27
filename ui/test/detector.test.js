@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   TIMING,
-  backFingersCurled,
   createDetector,
+  peaceShape,
   raiseAmountAt,
   turnFrom,
 } from '../gestures/detector.js';
-import { MY_TURN, hand } from './gestureHands.js';
+import { MY_TURN, backOfHandPeace, hand } from './gestureHands.js';
 
 const FRAME_MS = 50;
 
@@ -23,18 +23,6 @@ function show(detector, hands, { from = 0, ms, turn = MY_TURN }) {
     if (out.fired) fired.push(out.fired);
   }
   return { out, fired, now };
-}
-
-/** Moves the index fingertip through these heights, one frame each. */
-function knock(detector, heights, { from = 0, turn = MY_TURN, gap = FRAME_MS } = {}) {
-  const fired = [];
-  let now = from;
-  for (const tipY of heights) {
-    const out = detector.update([hand('Closed_Fist', { curled: true, tipY })], now, turn);
-    if (out.fired) fired.push(out.fired);
-    now += gap;
-  }
-  return { fired, now };
 }
 
 const CHECK_TURN = { ...MY_TURN, legalActions: ['fold', 'check', 'raise', 'allin'] };
@@ -92,7 +80,7 @@ describe('gesture detector', () => {
     expect(show(detector, [hand('Open_Palm', { y: 0.2 })], { ms: 300, turn }).out.raising).toBe(
       false,
     );
-    expect(knock(detector, [0.4, 0.5, 0.4, 0.5, 0.4], { turn: MY_TURN }).fired).toEqual([]);
+    expect(show(detector, [hand('Victory')], { ms: 1500, turn: MY_TURN }).fired).toEqual([]);
   });
 
   it('ignores gestures MediaPipe is unsure about', () => {
@@ -135,18 +123,75 @@ describe('gesture detector', () => {
     expect(down).toMatchObject({ raising: false, action: 'fold' });
   });
 
-  it('checks with two knocks', () => {
-    const { fired } = knock(createDetector(), [0.4, 0.5, 0.4, 0.5, 0.4], { turn: CHECK_TURN });
-    expect(fired).toEqual([{ action: 'check' }]);
+  it('checks with a ✌️ peace sign held for a second, with the ring on the way', () => {
+    const detector = createDetector();
+    const half = show(detector, [hand('Victory')], { ms: 500, turn: CHECK_TURN });
+    expect(half.out).toMatchObject({ action: 'check', fired: null });
+    expect(half.out.progress).toBeCloseTo(0.5);
+    const rest = show(detector, [hand('Victory')], { from: half.now, ms: 500, turn: CHECK_TURN });
+    expect(rest.fired).toEqual([{ action: 'check' }]);
   });
 
-  it('does not check on one knock, or on two knocks far apart', () => {
-    expect(knock(createDetector(), [0.4, 0.5, 0.4, 0.4, 0.4], { turn: CHECK_TURN }).fired).toEqual(
+  it('does not check on a quick peace sign, and a fist or knocking no longer checks', () => {
+    expect(show(createDetector(), [hand('Victory')], { ms: 600, turn: CHECK_TURN }).fired).toEqual(
       [],
     );
-    expect(
-      knock(createDetector(), [0.4, 0.5, 0.4, 0.5, 0.4], { turn: CHECK_TURN, gap: 500 }).fired,
-    ).toEqual([]);
+    const fist = show(createDetector(), [hand('Closed_Fist', { curled: true })], {
+      ms: 2000,
+      turn: CHECK_TURN,
+    });
+    expect(fist.fired).toEqual([]);
+    expect(fist.out.action).toBeNull();
+  });
+
+  it('cancels a raise with a peace sign and checks instead', () => {
+    const detector = createDetector();
+    const palm = show(detector, [hand('Open_Palm')], { ms: 100, turn: CHECK_TURN });
+    expect(palm.out.raising).toBe(true);
+    const peace = show(detector, [hand('Victory')], {
+      from: palm.now,
+      ms: 1000,
+      turn: CHECK_TURN,
+    });
+    expect(peace.fired).toEqual([{ action: 'check' }]);
+  });
+
+  it('checks with a peace sign from the back of the hand, which MediaPipe does not label', () => {
+    const detector = createDetector();
+    const half = show(detector, [backOfHandPeace()], { ms: 500, turn: CHECK_TURN });
+    expect(half.out).toMatchObject({ action: 'check' });
+    const rest = show(detector, [backOfHandPeace()], { from: half.now, ms: 500, turn: CHECK_TURN });
+    expect(rest.fired).toEqual([{ action: 'check' }]);
+    // Not when checking is not allowed, and the label wins over the shape for other gestures.
+    expect(show(createDetector(), [backOfHandPeace()], { ms: 1500 }).fired).toEqual([]);
+    const thumb = hand('Thumb_Up', { out: ['index', 'middle'] });
+    expect(show(createDetector(), [thumb], { ms: 1100, turn: MY_TURN }).fired).toEqual([
+      { action: 'call' },
+    ]);
+  });
+
+  it('keeps a raise when a closing fist passes through the peace shape', () => {
+    const detector = createDetector();
+    const palm = show(detector, [hand('Open_Palm', { y: 0.525 })], { ms: 100 });
+    const passing = detector.update([backOfHandPeace()], palm.now, MY_TURN);
+    expect(passing).toMatchObject({ raising: true, raiseAmount: 500 });
+    const fist = show(detector, [hand('Closed_Fist', { curled: true })], {
+      from: palm.now + FRAME_MS,
+      ms: TIMING.raiseConfirmMs,
+    });
+    expect(fist.fired).toEqual([{ action: 'raise', amount: 500 }]);
+  });
+
+  it('keeps a peace sign that is lost for a frame', () => {
+    const detector = createDetector();
+    const held = show(detector, [hand('Victory')], { ms: 600, turn: CHECK_TURN });
+    expect(detector.update([], held.now, CHECK_TURN)).toMatchObject({ action: 'check' });
+    const back = show(detector, [hand('Victory')], {
+      from: held.now + FRAME_MS,
+      ms: 400,
+      turn: CHECK_TURN,
+    });
+    expect(back.fired).toEqual([{ action: 'check' }]);
   });
 
   it('pauses after an action so one gesture does not fire twice', () => {
@@ -189,6 +234,24 @@ describe('gesture detector', () => {
 describe('gesture helpers', () => {
   const limits = { minRaise: 20, maxRaise: 980, step: 10 };
 
+  it('sees ✌️ in the finger joints, and no other gesture we use', () => {
+    expect(peaceShape(backOfHandPeace().landmarks)).toBe(true);
+    expect(peaceShape(hand('None', { out: ['index', 'middle'], y: 0.3 }).landmarks)).toBe(true);
+    const not = {
+      fist: [],
+      pointing: ['index'],
+      loveYou: ['index', 'little'], // 🤟, the thumb is not checked
+      threeFingers: ['index', 'middle', 'ring'],
+      openHand: ['index', 'middle', 'ring', 'little'],
+      middleAndRing: ['middle', 'ring'],
+    };
+    for (const [name, out] of Object.entries(not)) {
+      expect(peaceShape(hand('None', { out }).landmarks), name).toBe(false);
+    }
+    expect(peaceShape([])).toBe(false);
+    expect(peaceShape(undefined)).toBe(false);
+  });
+
   it('maps palm height to a raise within the limits, rounded to the big blind', () => {
     expect(raiseAmountAt(0.95, limits)).toBe(20);
     expect(raiseAmountAt(0.85, limits)).toBe(20);
@@ -200,11 +263,6 @@ describe('gesture helpers', () => {
     expect(raiseAmountAt(0.3, { minRaise: 20, maxRaise: 975, step: 10 })).toBeLessThanOrEqual(975);
     // Only one amount possible (e.g. a short stack).
     expect(raiseAmountAt(0.3, { minRaise: 300, maxRaise: 300, step: 10 })).toBe(300);
-  });
-
-  it('tells a fist from an open hand', () => {
-    expect(backFingersCurled(hand('Closed_Fist', { curled: true }).landmarks)).toBe(true);
-    expect(backFingersCurled(hand('Open_Palm').landmarks)).toBe(false);
   });
 
   it('builds the turn from the private message', () => {

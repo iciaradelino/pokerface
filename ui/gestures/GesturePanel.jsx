@@ -12,7 +12,7 @@ export const ACTION_LABELS = {
 };
 
 export const GESTURE_GUIDE = [
-  { action: 'check', how: 'Knock twice with a fist or a finger ✊' },
+  { action: 'check', how: 'Peace sign, hold 1 s ✌️' },
   { action: 'call', how: 'Thumbs up, hold 1 s 👍' },
   { action: 'fold', how: 'Thumbs down, hold 1 s 👎' },
   { action: 'raise', how: 'Open palm, move up or down for the amount, then close your fist ✋' },
@@ -114,7 +114,7 @@ export function GesturePreview({ gestures, children }) {
 }
 
 const GUIDE_ICONS = {
-  check: 'knock',
+  check: 'peace',
   call: 'thumbsUp',
   fold: 'thumbsDown',
   raise: 'upDown',
