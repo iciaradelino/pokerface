@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { WaitingRoomPage } from '../src/pages/WaitingRoomPage.jsx';
 import { clearPlayerId, getPlayerId, savePlayerId } from '../src/player.js';
 import { FakeSocket } from './fakeSocket.js';
-import { fakeStream } from './fakePeerConnection.js';
+import { FakePeerConnection, fakeStream } from './fakePeerConnection.js';
 
 const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
 const SOFIA = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -71,6 +71,9 @@ beforeEach(() => {
   savePlayerId(ME);
   FakeSocket.reset();
   vi.stubGlobal('WebSocket', FakeSocket);
+  // jsdom has no RTCPeerConnection; with two or more seats the video mesh opens one.
+  FakePeerConnection.reset();
+  vi.stubGlobal('RTCPeerConnection', FakePeerConnection);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
