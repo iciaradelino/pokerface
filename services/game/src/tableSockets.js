@@ -11,6 +11,9 @@ export const CLOSE = Object.freeze({
 
 const PATH = /^\/tables\/([^/]+)\/ws$/;
 export const HEARTBEAT_MS = 30_000;
+// How long a seated player may be without an open connection before they are stood up. A page
+// reload reconnects in a few seconds, so it never costs a player their seat.
+export const DISCONNECT_GRACE_MS = 60_000;
 const MAX_MESSAGE_BYTES = 64 * 1024; // An SDP offer is a few KB.
 
 /**
@@ -25,17 +28,24 @@ const MAX_MESSAGE_BYTES = 64 * 1024; // An SDP offer is a few KB.
  *
  * A connection is only "admitted" once the database confirms the player is seated. Until then it
  * neither sends nor receives anything: no signals, no state.
+ *
+ * A seated player whose last connection closes (tab closed, connection lost) and who does not
+ * reconnect within `disconnectGraceMs` leaves the table, as if they had pressed Leave: folded if a
+ * hand is being played, with the seat freed when it ends. Otherwise their seat would stay taken,
+ * with the turn timer folding for them every hand.
  */
 export function attachTableSockets({
   server,
   live,
   uiOrigin,
   heartbeatMs = HEARTBEAT_MS,
+  disconnectGraceMs = DISCONNECT_GRACE_MS,
   logger = console.log,
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
   const rooms = new Map(); // table id -> Set of socket connections
   let nextConnectionId = 0;
+  const goneTimers = new Map(); // "tableId:playerId" -> timer that stands the player up
 
   const logLine = (path, status, started) =>
     logger(
@@ -90,6 +100,36 @@ export function attachTableSockets({
     room?.delete(connection);
     if (room?.size === 0) rooms.delete(tableId);
     else if (connection.admitted) broadcastVideoPeers(tableId);
+    if (connection.admitted && !connection.removed) standUpIfGone(tableId, connection.playerId);
+  }
+
+  const hasConnection = (tableId, playerId) =>
+    [...(rooms.get(tableId) ?? [])].some((c) => c.admitted && c.playerId === playerId);
+
+  // Starts the grace period when the player's last connection to this table has closed.
+  function standUpIfGone(tableId, playerId) {
+    const key = `${tableId}:${playerId}`;
+    if (goneTimers.has(key) || hasConnection(tableId, playerId)) return;
+    const timer = setTimeout(() => {
+      goneTimers.delete(key);
+      if (hasConnection(tableId, playerId)) return;
+      live
+        .leave(tableId, playerId)
+        .then(({ status }) => {
+          if (status === 'left' || status === 'leaving') {
+            logEvent('player_disconnected', { tableId, leftNow: status === 'left' });
+          }
+        })
+        .catch(() => logEvent('player_disconnect_failed', { tableId }));
+    }, disconnectGraceMs);
+    timer.unref();
+    goneTimers.set(key, timer);
+  }
+
+  function cancelStandUp(tableId, playerId) {
+    const key = `${tableId}:${playerId}`;
+    clearTimeout(goneTimers.get(key));
+    goneTimers.delete(key);
   }
 
   function relay(tableId, sender, raw) {
@@ -157,6 +197,7 @@ export function attachTableSockets({
     // Admitted from here. A change that lands before the view below is also in the view, which
     // is read after it, so the last state the player gets is always the newest.
     connection.admitted = true;
+    cancelStandUp(tableId, connection.playerId);
     const view = await live.view(tableId, connection.playerId);
     if (!view) return refuse(CLOSE.NOT_FOUND, 'Table not found');
     sendJson(socket, view.state);
@@ -221,6 +262,7 @@ export function attachTableSockets({
       for (const connection of [...room]) {
         if (!connection.admitted) continue; // It gets the full state when admitted.
         if (!seated.has(connection.playerId)) {
+          connection.removed = true; // They left on purpose: nothing to stand up.
           leave(tableId, connection);
           connection.socket.close(CLOSE.NOT_SEATED, 'You left the table');
           continue;
@@ -233,9 +275,13 @@ export function attachTableSockets({
     /** Closes every socket of a deleted table. */
     closeTable(tableId) {
       for (const connection of rooms.get(tableId) ?? []) {
+        connection.removed = true;
         connection.socket.close(CLOSE.NOT_FOUND, 'The table was deleted');
       }
       rooms.delete(tableId);
+      for (const key of goneTimers.keys()) {
+        if (key.startsWith(`${tableId}:`)) cancelStandUp(...key.split(':'));
+      }
     },
 
     /** Number of open connections at a table (for tests). */
@@ -244,7 +290,14 @@ export function attachTableSockets({
     close() {
       server.off('upgrade', onUpgrade);
       clearInterval(heartbeat);
-      for (const room of rooms.values()) for (const { socket } of room) socket.terminate();
+      for (const timer of goneTimers.values()) clearTimeout(timer);
+      goneTimers.clear();
+      for (const room of rooms.values()) {
+        for (const connection of room) {
+          connection.removed = true; // Shutting down: nobody is standing up.
+          connection.socket.terminate();
+        }
+      }
       rooms.clear();
       wss.close();
     },
