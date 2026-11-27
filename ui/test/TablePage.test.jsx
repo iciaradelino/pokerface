@@ -19,6 +19,7 @@ import {
   formatClock,
   potRaise,
   secondsLeft,
+  moveText,
   seatNote,
 } from '../src/table/tableView.js';
 import { FakeSocket } from './fakeSocket.js';
@@ -336,6 +337,31 @@ describe('TablePage', () => {
     vi.useRealTimers();
   });
 
+  it('shows what each player just did next to their seat', async () => {
+    mockServices();
+    await renderLive(
+      stateMessage({
+        currentPlayer: SOFIA,
+        seats: [
+          {
+            seat: 0,
+            playerId: ME,
+            name: 'Alex',
+            stack: 960,
+            bet: 40,
+            status: 'active',
+            lastAction: { type: 'raise', amount: 40, to: 40 },
+          },
+          { seat: 1, playerId: SOFIA, name: 'Sofía', stack: 970, bet: 10, status: 'active' },
+        ],
+      }),
+      privateMessage({ legalActions: [], minRaise: null, maxRaise: null }),
+    );
+
+    expect(screen.getByText('Raised to 40')).toBeInTheDocument();
+    expect(screen.getByText('Thinking…')).toBeInTheDocument();
+  });
+
   it('stops reconnecting when the table no longer exists', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockServices();
@@ -647,5 +673,21 @@ describe('table helpers', () => {
     expect(seatNote({ playerId: 'a', status: 'allin' }, turn)).toBe('All-in');
     expect(seatNote({ playerId: 'a', status: 'out' }, turn)).toBe('Out of chips');
     expect(seatNote({ playerId: 'a', status: 'waiting' }, turn)).toBe('');
+  });
+
+  it('says what a player just did, except on their turn', () => {
+    const turn = { currentPlayer: 'me', myPlayerId: 'me' };
+    const note = (lastAction, extra = {}) =>
+      seatNote({ playerId: 'a', status: 'active', lastAction, ...extra }, turn);
+    expect(note({ type: 'check', amount: 0, to: 0 })).toBe('Checked');
+    expect(note({ type: 'call', amount: 25, to: 30 })).toBe('Called 25');
+    expect(note({ type: 'raise', amount: 60, to: 60 })).toBe('Raised to 60');
+    expect(note({ type: 'allIn', amount: 1000, to: 1000 }, { status: 'allin' })).toBe(
+      'All-in 1,000',
+    );
+    expect(note({ type: 'fold', amount: 0, to: 0 }, { status: 'folded' })).toBe('Folded');
+    expect(note(null, { status: 'allin' })).toBe('All-in');
+    expect(note({ type: 'call', amount: 25, to: 30 }, { playerId: 'me' })).toBe('Your turn');
+    expect(moveText(undefined)).toBe('');
   });
 });

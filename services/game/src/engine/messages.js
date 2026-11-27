@@ -71,6 +71,32 @@ function seatStatus(table, seat) {
   return 'active';
 }
 
+const MOVES = new Set([
+  ActionType.FOLD,
+  ActionType.CHECK,
+  ActionType.CALL,
+  ActionType.RAISE,
+  ActionType.ALL_IN,
+  'leave',
+]);
+
+/**
+ * What each player did in the current betting round, for the table to show next to their seat:
+ * { playerId -> { type, amount, to } } with `amount` the chips added by that move and `to` the
+ * player's total bet in the round afterwards. Blinds are not moves. A new round starts empty;
+ * when the hand is over it keeps the moves of the last round.
+ */
+function movesThisRound(hand) {
+  const moves = new Map();
+  if (hand === null) return moves;
+  const phase = hand.phase === Phase.COMPLETE ? hand.actions.at(-1)?.phase : hand.phase;
+  for (const action of hand.actions) {
+    if (action.phase !== phase || !MOVES.has(action.type)) continue;
+    moves.set(action.playerId, { type: action.type, amount: action.amount, to: action.to });
+  }
+  return moves;
+}
+
 /**
  * Main pot and side pots of the chips bet so far, each with who can still win it.
  *
@@ -126,6 +152,7 @@ export function publicState(table, { timerEndsAt = null, paused = false } = {}) 
   const hand = table.hand;
   const live = isHandInProgress(table);
   const handPlayers = new Map((hand?.players ?? []).map((p) => [p.id, p]));
+  const moves = movesThisRound(hand);
 
   let pots = [];
   if (hand !== null) {
@@ -155,6 +182,7 @@ export function publicState(table, { timerEndsAt = null, paused = false } = {}) 
           stack: player ? player.stack : seat.stack,
           bet: player ? player.streetBet : 0,
           status: seatStatus(table, seat),
+          lastAction: moves.get(seat.id) ?? null,
         },
       ];
     }),

@@ -176,7 +176,7 @@ Individual grades can move by up to ±30%, based on contribution statements and 
 ## 6. Shared contracts (tell the affected owners before changing one)
 
 - **Action:** `POST /tables/:id/actions {playerId, action: check|call|fold|raise|allin, amount?}` → `200` + new state, or `409` if illegal or not your turn.
-- **Public state (WS):** `{type:"state", stage, paused, board, pots, dealer, currentPlayer, timerEndsAt, seats:[{playerId, name, stack, bet, status}]}`
+- **Public state (WS):** `{type:"state", stage, paused, board, pots, dealer, currentPlayer, timerEndsAt, seats:[{playerId, name, stack, bet, status, lastAction}]}` (`lastAction` is `{type, amount, to}` with the player's last move in the current betting round, or `null`)
 - **Private state (WS):** `{type:"private", holeCards, legalActions, minRaise, maxRaise}`
 - **Video (WS):** The server sends `{type:"video-peers", peers:{[playerId]:connectionId}}` for admitted sockets. Clients send `{type:"signal", to, toConnection, data}`. The relay adds `from` and `fromConnection`. When a player reconnects, only their new connection receives video signals.
 - **Gestures → UI:** `onProgress(action, 0..1)`, `onRaiseAmount(n)`, `onFire(action, amount?)`
