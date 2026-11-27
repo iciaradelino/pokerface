@@ -575,6 +575,79 @@ describe('useTableSocket signals', () => {
   });
 });
 
+describe('TablePage next hand', () => {
+  const over = (overrides = {}) =>
+    stateMessage({ stage: 'complete', currentPlayer: null, timerEndsAt: null, ...overrides });
+  const quiet = () => privateMessage({ legalActions: [], minRaise: null, maxRaise: null });
+  const bodyOf = (fetch, path) => {
+    const call = fetch.mock.calls.find(([url]) => url.endsWith(path));
+    return JSON.parse(call[1].body);
+  };
+
+  it('deals by itself by default, with no Next hand button', async () => {
+    mockServices();
+    await renderLive(over(), quiet());
+    expect(screen.queryByRole('button', { name: 'Next hand' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Next hand: automatic' })).toBeInTheDocument();
+  });
+
+  it('waits for Next hand when the host turned the automatic deal off', async () => {
+    const fetch = mockServices({ 'POST /tables/K7QX2M/next-hand': () => json(200, {}) });
+    await renderLive(over({ autoNext: false }), quiet());
+    fireEvent.click(screen.getByRole('button', { name: 'Next hand' }));
+    await waitFor(() =>
+      expect(bodyOf(fetch, '/tables/K7QX2M/next-hand')).toEqual({ playerId: ME }),
+    );
+  });
+
+  it('says so while waiting between hands, and shows no button during a hand', async () => {
+    mockServices();
+    await renderLive(stateMessage({ autoNext: false, stage: 'waiting', handNumber: 0 }));
+    expect(screen.getByText('Press Next hand when you are ready')).toBeInTheDocument();
+    cleanup();
+    FakeSocket.reset();
+    await renderLive(stateMessage({ autoNext: false })); // a hand in progress
+    expect(screen.queryByRole('button', { name: 'Next hand' })).toBeNull();
+  });
+
+  it('lets the host switch the automatic deal off and on', async () => {
+    const fetch = mockServices({ 'POST /tables/K7QX2M/auto-deal': () => json(200, {}) });
+    await renderLive(over(), quiet());
+    fireEvent.click(screen.getByRole('button', { name: 'Next hand: automatic' }));
+    await waitFor(() =>
+      expect(bodyOf(fetch, '/tables/K7QX2M/auto-deal')).toEqual({
+        playerId: ME,
+        autoDeal: false,
+      }),
+    );
+  });
+
+  it('sends autoDeal true when it is already manual', async () => {
+    const fetch = mockServices({ 'POST /tables/K7QX2M/auto-deal': () => json(200, {}) });
+    await renderLive(over({ autoNext: false }), quiet());
+    fireEvent.click(screen.getByRole('button', { name: 'Next hand: manual' }));
+    await waitFor(() => expect(bodyOf(fetch, '/tables/K7QX2M/auto-deal').autoDeal).toBe(true));
+  });
+
+  it('gives the toggle to the host only, but the Next hand button to everyone', async () => {
+    mockServices({ 'GET /tables/K7QX2M': () => json(200, { ...TABLE, createdBy: SOFIA }) });
+    await renderLive(over({ autoNext: false }), quiet());
+    expect(screen.queryByRole('button', { name: /Next hand: / })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Next hand' })).toBeInTheDocument();
+  });
+
+  it('shows why the server refused it', async () => {
+    mockServices({
+      'POST /tables/K7QX2M/next-hand': () =>
+        json(409, { code: 'NOT_READY', message: 'The next hand cannot start yet' }),
+    });
+    await renderLive(over({ autoNext: false }), quiet());
+    fireEvent.click(screen.getByRole('button', { name: 'Next hand' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The next hand cannot start yet');
+    expect(screen.getByRole('button', { name: 'Next hand' })).toBeEnabled();
+  });
+});
+
 describe('table helpers', () => {
   const seats = [
     { seat: 1, playerId: 'a' },

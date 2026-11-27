@@ -74,6 +74,7 @@ describe('publicState', () => {
     expect(publicState(table3())).toEqual({
       type: 'state',
       paused: false,
+      autoNext: true,
       handNumber: 0,
       stage: 'waiting',
       board: [],
