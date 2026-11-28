@@ -27,6 +27,15 @@ export const gameApi = {
    */
   startTable: (id, playerId) => game(`${table(id)}/start`, { method: 'POST', body: { playerId } }),
   pauseTable: (id, playerId) => game(`${table(id)}/pause`, { method: 'POST', body: { playerId } }),
+  /**
+   * Only the creator: autoDeal false keeps the next hand waiting until a player asks for it with
+   * nextHand; true deals it by itself again. 403 for anyone else.
+   */
+  setAutoDeal: (id, playerId, autoDeal) =>
+    game(`${table(id)}/auto-deal`, { method: 'POST', body: { playerId, autoDeal } }),
+  /** Any seated player: deal the next hand now. 409 while a hand is being played. */
+  nextHand: (id, playerId) =>
+    game(`${table(id)}/next-hand`, { method: 'POST', body: { playerId } }),
   /** Only the player who created the table may delete it. */
   deleteTable: (id, playerId) =>
     game(`${table(id)}?playerId=${encodeURIComponent(playerId)}`, { method: 'DELETE' }),

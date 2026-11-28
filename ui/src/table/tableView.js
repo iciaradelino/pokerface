@@ -1,3 +1,5 @@
+import { formatChips } from '../components/Chips.jsx';
+
 // Pure helpers for the table screen. Message shapes come from
 // services/game/src/engine/messages.js (publicState and privateState).
 
@@ -88,10 +90,34 @@ export function formatClock(seconds) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-/** Short line under a seat: "Your turn", "Folded", "All-in", "Out". Empty when nothing to say. */
+/** What a player did, in a few words: "Checked", "Called 20", "Raised to 60", "All-in 300". */
+export function moveText(move) {
+  switch (move?.type) {
+    case 'check':
+      return 'Checked';
+    case 'call':
+      return `Called ${formatChips(move.amount)}`;
+    case 'raise':
+      return `Raised to ${formatChips(move.to)}`;
+    case 'allIn':
+      return `All-in ${formatChips(move.to)}`;
+    case 'fold':
+    case 'leave':
+      return 'Folded';
+    default:
+      return '';
+  }
+}
+
+/**
+ * Short line under a seat: "Your turn", what the player just did ("Called 20"), "Folded",
+ * "All-in", "Out of chips". Empty when nothing to say.
+ */
 export function seatNote(seat, { currentPlayer, myPlayerId }) {
   if (seat.playerId === currentPlayer)
     return seat.playerId === myPlayerId ? 'Your turn' : 'Thinking…';
+  const move = moveText(seat.lastAction);
+  if (move) return move;
   if (seat.status === 'folded') return 'Folded';
   if (seat.status === 'allin') return 'All-in';
   if (seat.status === 'out') return 'Out of chips';
