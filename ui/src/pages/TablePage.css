@@ -471,6 +471,14 @@
   color: var(--color-on-lime);
 }
 
+/* What the player has put in during the whole hand, quieter than the note above it */
+.seat__invested {
+  color: var(--color-on-dark-muted);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Revealed cards above a tile; your own cards are bigger and overlap the felt */
 .seat__cards {
   display: flex;
