@@ -113,3 +113,62 @@ describe('DELETE /tables/:id during a hand', () => {
     expect((await remove(ana)).status).toBe(204);
   });
 });
+
+describe('POST /tables/:id/kick and /readmit', () => {
+  const kick = (playerId, targetId) =>
+    request(app).post('/tables/K7QX2M/kick').send({ playerId, targetId });
+  const readmit = (playerId, targetId) =>
+    request(app).post('/tables/K7QX2M/readmit').send({ playerId, targetId });
+
+  it('removes a player between hands, who cannot join again until let back in', async () => {
+    await join(ben);
+    const kicked = await kick(ana, ben);
+    expect(kicked.status).toBe(200);
+    expect(kicked.body.leftNow).toBe(true);
+    expect(kicked.body.table.seats.map((seat) => seat.playerId)).toEqual([ana]);
+    expect(kicked.body.table.kicked).toEqual([{ playerId: ben, name: 'Ben' }]);
+
+    const refused = await join(ben);
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe('KICKED');
+
+    const readmitted = await readmit(ana, ben);
+    expect(readmitted.status).toBe(200);
+    expect(readmitted.body.kicked).toEqual([]);
+    expect((await join(ben)).status).toBe(200);
+  });
+
+  it('folds a player removed mid-hand and frees the seat when the hand ends', async () => {
+    await join(ben);
+    await join(cleo);
+    await startHand();
+    const kicked = await kick(ana, cleo);
+    expect(kicked.status).toBe(200);
+    expect(kicked.body.leftNow).toBe(false);
+    expect((await join(cleo)).status).toBe(200); // Still seated until the hand ends.
+    await leave(ben); // Ana is the last player in the hand, so it ends.
+    expect(tables.rows.get('K7QX2M').seats.map((seat) => seat.playerId)).toEqual([ana]);
+    expect((await join(cleo)).body.code).toBe('KICKED');
+  });
+
+  it('lets only the creator remove or let back in, and checks the request', async () => {
+    await join(ben);
+    expect((await kick(ben, ana)).status).toBe(403);
+    expect((await readmit(ben, ana)).status).toBe(403);
+    expect((await kick(ana, 'nope')).status).toBe(400);
+    expect((await readmit(ana, 'nope')).status).toBe(400);
+    const self = await kick(ana, ana);
+    expect(self.status).toBe(400);
+    expect(self.body.message).toBe('You cannot remove yourself');
+    const notSeated = await kick(ana, cleo);
+    expect(notSeated.status).toBe(404);
+    expect(notSeated.body.code).toBe('NOT_SEATED');
+    expect((await readmit(ana, cleo)).status).toBe(404);
+  });
+
+  it('returns 404 if the table disappeared in the meantime', async () => {
+    await join(ben);
+    live.kick = async () => ({ status: 'not_found' });
+    expect((await kick(ana, ben)).status).toBe(404);
+  });
+});

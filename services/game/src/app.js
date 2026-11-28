@@ -142,6 +142,14 @@ export function createApp({
           return sendError(response, 404, 'NOT_FOUND', 'Table not found');
         if (result.status === 'full')
           return sendError(response, 409, 'TABLE_FULL', 'This table is full');
+        if (result.status === 'kicked') {
+          return sendError(
+            response,
+            403,
+            'KICKED',
+            'The host removed you from this table. Ask them to let you back in',
+          );
+        }
         if (result.status === 'chip_limit') {
           return sendError(
             response,
@@ -279,6 +287,56 @@ export function createApp({
         }
         if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
         response.status(204).end();
+      }),
+    ),
+  );
+
+  // The creator removes a player: { playerId (the creator), targetId }. The player is folded if a
+  // hand is being played and cannot join again until the creator lets them back in.
+  app.post(
+    '/tables/:id/kick',
+    withTableId(
+      route(async (request, response) => {
+        if (!(await creatorTable(request, response, request.body?.playerId))) return;
+        const targetId = request.body?.targetId;
+        if (!isUuid(targetId)) {
+          return sendError(response, 400, 'INVALID_INPUT', 'targetId must be a UUID');
+        }
+        if (targetId.toLowerCase() === request.body.playerId.toLowerCase()) {
+          return sendError(response, 400, 'INVALID_INPUT', 'You cannot remove yourself');
+        }
+        const { status } = await live.kick(request.tableId, targetId.toLowerCase());
+        if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        if (status === 'not_seated') {
+          return sendError(response, 404, 'NOT_SEATED', 'That player is not at this table');
+        }
+        response.json({
+          leftNow: status === 'left',
+          table: await tables.getTable(request.tableId),
+        });
+      }),
+    ),
+  );
+
+  // The creator lets a removed player join again: { playerId (the creator), targetId }.
+  app.post(
+    '/tables/:id/readmit',
+    withTableId(
+      route(async (request, response) => {
+        if (!(await creatorTable(request, response, request.body?.playerId))) return;
+        const targetId = request.body?.targetId;
+        if (!isUuid(targetId)) {
+          return sendError(response, 400, 'INVALID_INPUT', 'targetId must be a UUID');
+        }
+        if (!(await tables.readmitPlayer(request.tableId, targetId.toLowerCase()))) {
+          return sendError(
+            response,
+            404,
+            'NOT_FOUND',
+            'That player was not removed from this table',
+          );
+        }
+        response.json(await tables.getTable(request.tableId));
       }),
     ),
   );

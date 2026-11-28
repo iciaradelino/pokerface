@@ -28,6 +28,7 @@ export const TURN_MS = 120_000;
  * Statuses returned to the routes:
  *   join:   'joined' | 'already_seated' | 'full' | 'chip_limit' | 'not_found'   (+ seatIndex)
  *   leave:  'left' | 'leaving' (at the end of the current hand) | 'not_seated' | 'not_found'
+ *   kick:   same as leave
  *   remove: 'deleted' | 'hand_in_progress' | 'results_pending' | 'not_found'
  *   act:    'ok' (+ state, private) | 'not_found'; a rule violation throws the engine's EngineError
  *
@@ -190,6 +191,17 @@ export function createLiveTables({
     scheduleNextHand(entry);
   }
 
+  // Frees the seat now, or folds the player and frees it when the current hand ends.
+  async function standUpPlayer(entry, playerId) {
+    const inHand =
+      isHandInProgress(entry.game) && entry.game.hand.players.some((p) => p.id === playerId);
+    if (!inHand) await tables.removeSeat(entry.id, playerId);
+    entry.game = standUp(entry.game, playerId);
+    await afterChange(entry);
+    const stillSeated = entry.game.seats.some((seat) => seat?.id === playerId);
+    return { status: stillSeated ? 'leaving' : 'left' };
+  }
+
   function forget(entry) {
     clearTimeout(entry.turn?.timer);
     clearTimeout(entry.nextHandTimer);
@@ -243,13 +255,21 @@ export function createLiveTables({
         if (!entry) return { status: 'not_found' };
         if (!entry.game.seats.some((seat) => seat?.id === playerId))
           return { status: 'not_seated' };
-        const inHand =
-          isHandInProgress(entry.game) && entry.game.hand.players.some((p) => p.id === playerId);
-        if (!inHand) await tables.removeSeat(id, playerId);
-        entry.game = standUp(entry.game, playerId);
-        await afterChange(entry);
-        const stillSeated = entry.game.seats.some((seat) => seat?.id === playerId);
-        return { status: stillSeated ? 'leaving' : 'left' };
+        return standUpPlayer(entry, playerId);
+      }),
+
+    /**
+     * The creator removes a player: like Leave for that player, and they cannot join again until
+     * the creator lets them back in.
+     */
+    kick: (id, playerId) =>
+      run(id, async () => {
+        const entry = await load(id);
+        if (!entry) return { status: 'not_found' };
+        const seat = entry.game.seats.find((s) => s?.id === playerId);
+        if (!seat) return { status: 'not_seated' };
+        await tables.kickPlayer(id, { playerId, playerName: seat.name });
+        return standUpPlayer(entry, playerId);
       }),
 
     /** Pausing lets the current hand finish but starts no new one until the table is resumed. */
