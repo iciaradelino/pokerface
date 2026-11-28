@@ -180,6 +180,7 @@ Individual grades can move by up to ±30%, based on contribution statements and 
 - **Private state (WS):** `{type:"private", holeCards, legalActions, minRaise, maxRaise}`
 - **Video (WS):** The server sends `{type:"video-peers", peers:{[playerId]:connectionId}}` for admitted sockets. Clients send `{type:"signal", to, toConnection, data}`. The relay adds `from` and `fromConnection`. When a player reconnects, only their new connection receives video signals.
 - **Gestures → UI:** `onProgress(action, 0..1)`, `onRaiseAmount(n)`, `onFire(action, amount?)`
+- **Next hand:** the public state has `autoNext` (true: the next hand is dealt by itself). The creator sets it with `POST /tables/:id/auto-deal {playerId, autoDeal}` (`403` for anyone else). With it off, any seated player asks for the next hand with `POST /tables/:id/next-hand {playerId}` (`409` while a hand is being played or when it cannot start). It is kept in memory: a restart goes back to dealing by itself.
 - **`game` → `players`:** `GET /players/:id`, `POST /players/:id/results {handId, delta}`. `handId` lets `players` ignore a result it already saved, so retries are safe.
 
 ## 7. Repo layout

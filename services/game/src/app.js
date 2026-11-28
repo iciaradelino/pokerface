@@ -252,6 +252,49 @@ export function createApp({
     );
   }
 
+  // POST /tables/:id/auto-deal { playerId, autoDeal: boolean }. Only the creator. With autoDeal
+  // false, the next hand waits until a player asks for it with /next-hand.
+  app.post(
+    '/tables/:id/auto-deal',
+    withTableId(
+      route(async (request, response) => {
+        if (!(await creatorTable(request, response, request.body?.playerId))) return;
+        if (typeof request.body.autoDeal !== 'boolean') {
+          return sendError(response, 400, 'INVALID_INPUT', 'autoDeal must be true or false');
+        }
+        if (!(await live.setAutoNext(request.tableId, request.body.autoDeal))) {
+          return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        }
+        response.json({ autoDeal: request.body.autoDeal });
+      }),
+    ),
+  );
+
+  // POST /tables/:id/next-hand { playerId }. Any seated player asks for the next hand to be
+  // dealt now, instead of waiting for it. 409 while a hand is being played or when it cannot
+  // start yet.
+  app.post(
+    '/tables/:id/next-hand',
+    withTableId(
+      route(async (request, response) => {
+        const { value, error } = validateJoinInput(request.body);
+        if (error) return sendError(response, 400, 'INVALID_INPUT', error);
+        const { status } = await live.dealNext(request.tableId, value.playerId);
+        if (status === 'not_found') return sendError(response, 404, 'NOT_FOUND', 'Table not found');
+        if (status === 'not_seated') {
+          return sendError(response, 403, 'NOT_SEATED', 'You are not at this table');
+        }
+        if (status === 'hand_in_progress') {
+          return sendError(response, 409, 'HAND_IN_PROGRESS', 'A hand is already being played');
+        }
+        if (status === 'not_ready') {
+          return sendError(response, 409, 'NOT_READY', 'The next hand cannot start yet');
+        }
+        response.json({ started: true });
+      }),
+    ),
+  );
+
   // DELETE /tables/:id?playerId=... Not while a hand is being played: pause the table, let the
   // hand finish, then delete it. Not while its results are still on their way to the players
   // service either, since deleting the table would delete them too.
