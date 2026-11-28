@@ -126,3 +126,35 @@ describe('the turn timer', () => {
     expect(state.timerEndsAt).toBeNull();
   });
 });
+
+describe("each table's own turn time", () => {
+  // Live tables without a fixed turnMs, so each table uses the time it was created with.
+  async function tableWithTurn(settings) {
+    live.close();
+    tables = fakeTablesRepository();
+    live = createLiveTables({ tables, handPauseMs: PAUSE, logger: () => {} });
+    await tables.createTable({
+      settings: { smallBlind: 5, bigBlind: 10, startingStack: 1000, maxSeats: 6, ...settings },
+      createdBy: ana,
+      creatorName: 'Ana',
+      generateId: () => 'P4WN9R',
+    });
+    await live.join('P4WN9R', { playerId: ben, playerName: 'Ben' });
+    await after(PAUSE);
+    return (await live.view('P4WN9R', ana)).state;
+  }
+
+  it('acts for the player when the table turn time runs out', async () => {
+    const state = await tableWithTurn({ turnSeconds: 15 });
+    expect(Date.parse(state.timerEndsAt) - Date.now()).toBe(15_000);
+    await after(14_999);
+    expect(tables.hands).toHaveLength(0);
+    await after(1); // The small blind cannot check, so they fold and the hand ends.
+    expect(tables.hands).toHaveLength(1);
+  });
+
+  it('gives two minutes at a table saved without a turn time', async () => {
+    const state = await tableWithTurn({});
+    expect(Date.parse(state.timerEndsAt) - Date.now()).toBe(120_000);
+  });
+});

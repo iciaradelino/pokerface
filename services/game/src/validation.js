@@ -14,8 +14,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bigBlind: 10,
   startingStack: 1000,
   maxSeats: 6,
+  turnSeconds: 120,
 });
 const MAX_BLIND = 1_000_000;
+// How long a player has to act, in seconds (migration 006 checks the same range).
+export const MIN_TURN_SECONDS = 15;
+export const MAX_TURN_SECONDS = 300;
 
 // Most chips that may ever be at one table. It matches the players service's limit on a single
 // hand result (|delta| <= 1,000,000,000): nobody can win more than everyone else at the table
@@ -45,7 +49,10 @@ function isObject(body) {
 
 const isWhole = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
 
-/** Validates the body of POST /tables: { playerId, smallBlind?, bigBlind?, startingStack?, maxSeats? }. */
+/**
+ * Validates the body of POST /tables:
+ * { playerId, smallBlind?, bigBlind?, startingStack?, maxSeats?, turnSeconds? }.
+ */
 export function validateCreateTableInput(body) {
   if (!isObject(body)) return { error: 'Request body must be a JSON object' };
   if (!isUuid(body.playerId)) return { error: 'playerId must be a UUID' };
@@ -54,7 +61,7 @@ export function validateCreateTableInput(body) {
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
     if (body[key] !== undefined) settings[key] = body[key];
   }
-  const { smallBlind, bigBlind, startingStack, maxSeats } = settings;
+  const { smallBlind, bigBlind, startingStack, maxSeats, turnSeconds } = settings;
   if (!isWhole(smallBlind, 1, MAX_BLIND) || !isWhole(bigBlind, smallBlind, MAX_BLIND)) {
     return {
       error: `Blinds must be whole numbers from 1 to ${MAX_BLIND}, small blind not above the big blind`,
@@ -67,6 +74,11 @@ export function validateCreateTableInput(body) {
   if (startingStack * maxSeats > MAX_CHIPS_PER_TABLE) {
     return {
       error: `startingStack x maxSeats must be at most ${MAX_CHIPS_PER_TABLE} chips, the limit per table`,
+    };
+  }
+  if (!isWhole(turnSeconds, MIN_TURN_SECONDS, MAX_TURN_SECONDS)) {
+    return {
+      error: `turnSeconds must be a whole number from ${MIN_TURN_SECONDS} to ${MAX_TURN_SECONDS}`,
     };
   }
 
