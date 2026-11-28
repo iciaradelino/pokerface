@@ -490,7 +490,7 @@ function SeatSpot({
       <div
         className={classes}
         style={{ left: `${x}%`, top: `${y}%`, '--seat-colour': playerColour(colour) }}
-        aria-label={`${isMe ? 'You' : seat.name}, ${formatChips(seat.stack)} chips${note ? `, ${note}` : ''}`}
+        aria-label={`${isMe ? 'You' : seat.name}, ${formatChips(seat.stack)} chips${note ? `, ${note}` : ''}${seat.invested > 0 ? `, ${formatChips(seat.invested)} in this hand` : ''}`}
       >
         {holeCards?.length > 0 && (
           <div className={isMe ? 'seat__cards seat__cards--mine' : 'seat__cards'}>
@@ -538,6 +538,11 @@ function SeatSpot({
           <span className="seat__note seat__note--winner">Wins {formatChips(won)}</span>
         ) : (
           note && <span className="seat__note">{note}</span>
+        )}
+        {seat.invested > 0 && (
+          <span className="seat__invested tabular" title="Chips this player has put in this hand">
+            In this hand {formatChips(seat.invested)}
+          </span>
         )}
       </div>
     </>

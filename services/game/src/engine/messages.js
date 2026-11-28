@@ -183,6 +183,9 @@ export function publicState(table, { timerEndsAt = null, paused = false, autoNex
           name: seat.name,
           stack: player ? player.stack : seat.stack,
           bet: player ? player.streetBet : 0,
+          // Everything this player has put in during the hand, whatever the round (`bet` is
+          // only the current round). It stays until the next hand starts.
+          invested: handPlayers.get(seat.id)?.totalBet ?? 0,
           status: seatStatus(table, seat),
           lastAction: moves.get(seat.id) ?? null,
         },

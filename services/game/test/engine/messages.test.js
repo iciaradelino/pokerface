@@ -90,6 +90,7 @@ describe('publicState', () => {
           stack: 1000,
           bet: 0,
           status: 'waiting',
+          invested: 0,
           lastAction: null,
         },
         {
@@ -99,6 +100,7 @@ describe('publicState', () => {
           stack: 1000,
           bet: 0,
           status: 'waiting',
+          invested: 0,
           lastAction: null,
         },
         {
@@ -108,6 +110,7 @@ describe('publicState', () => {
           stack: 1000,
           bet: 0,
           status: 'waiting',
+          invested: 0,
           lastAction: null,
         },
       ],
@@ -182,6 +185,42 @@ describe('publicState', () => {
     it('show an all-in', () => {
       const table = play(started(), ['ana', { action: 'allin' }]);
       expect(moves(table).ana).toEqual({ type: 'allIn', amount: 1000, to: 1000 });
+    });
+  });
+
+  describe('chips put in during the hand', () => {
+    const invested = (table) =>
+      Object.fromEntries(publicState(table).seats.map((s) => [s.playerId, s.invested]));
+
+    it('starts with the blinds', () => {
+      expect(invested(started())).toEqual({ ana: 0, ben: 5, cy: 10 });
+    });
+
+    it('adds up every round, while bet is only the current one', () => {
+      const table = play(
+        started(),
+        ['ana', { action: 'raise', amount: 30 }],
+        ['ben', { action: 'call' }],
+        ['cy', { action: 'call' }],
+      );
+      expect(publicState(table).stage).toBe('flop');
+      expect(invested(table)).toEqual({ ana: 30, ben: 30, cy: 30 });
+      expect(publicState(table).seats.map((s) => s.bet)).toEqual([0, 0, 0]);
+      const bet = play(table, ['ben', { action: 'raise', amount: 50 }]);
+      expect(invested(bet)).toEqual({ ana: 30, ben: 80, cy: 30 });
+      expect(publicState(bet).seats.find((s) => s.playerId === 'ben').bet).toBe(50);
+    });
+
+    it('stays after the hand ends, and starts again with the next one', () => {
+      const over = play(started(), ['ana', { action: 'fold' }], ['ben', { action: 'fold' }]);
+      expect(publicState(over).stage).toBe('complete');
+      expect(invested(over)).toEqual({ ana: 0, ben: 5, cy: 10 });
+      // The button moved on, so the blinds did too.
+      expect(invested(startNextHand(over, { deck }))).toEqual({ ana: 10, ben: 0, cy: 5 });
+    });
+
+    it('is 0 for everyone before the first hand', () => {
+      expect(invested(table3())).toEqual({ ana: 0, ben: 0, cy: 0 });
     });
   });
 

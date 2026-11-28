@@ -362,6 +362,41 @@ describe('TablePage', () => {
     expect(screen.getByText('Thinking…')).toBeInTheDocument();
   });
 
+  it('shows how many chips each player has put in during the hand', async () => {
+    mockServices();
+    await renderLive(
+      stateMessage({
+        seats: [
+          {
+            seat: 0,
+            playerId: ME,
+            name: 'Alex',
+            stack: 880,
+            bet: 40,
+            invested: 120,
+            status: 'active',
+          },
+          {
+            seat: 1,
+            playerId: SOFIA,
+            name: 'Sofía',
+            stack: 970,
+            bet: 0,
+            invested: 0,
+            status: 'active',
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByText('In this hand 120')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('You, 880 chips, Your turn, 120 in this hand'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/In this hand 0/)).toBeNull();
+    expect(screen.getAllByText(/^In this hand /)).toHaveLength(1);
+  });
+
   it('stops reconnecting when the table no longer exists', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockServices();
