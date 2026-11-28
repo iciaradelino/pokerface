@@ -74,6 +74,7 @@ describe('publicState', () => {
     expect(publicState(table3())).toEqual({
       type: 'state',
       paused: false,
+      autoNext: true,
       handNumber: 0,
       stage: 'waiting',
       board: [],
@@ -82,9 +83,33 @@ describe('publicState', () => {
       currentPlayer: null,
       timerEndsAt: null,
       seats: [
-        { seat: 0, playerId: 'ana', name: 'Ana', stack: 1000, bet: 0, status: 'waiting' },
-        { seat: 1, playerId: 'ben', name: 'Ben', stack: 1000, bet: 0, status: 'waiting' },
-        { seat: 2, playerId: 'cy', name: 'Cy', stack: 1000, bet: 0, status: 'waiting' },
+        {
+          seat: 0,
+          playerId: 'ana',
+          name: 'Ana',
+          stack: 1000,
+          bet: 0,
+          status: 'waiting',
+          lastAction: null,
+        },
+        {
+          seat: 1,
+          playerId: 'ben',
+          name: 'Ben',
+          stack: 1000,
+          bet: 0,
+          status: 'waiting',
+          lastAction: null,
+        },
+        {
+          seat: 2,
+          playerId: 'cy',
+          name: 'Cy',
+          stack: 1000,
+          bet: 0,
+          status: 'waiting',
+          lastAction: null,
+        },
       ],
       result: null,
     });
@@ -108,6 +133,56 @@ describe('publicState', () => {
       ['ben', 995, 5, 'active'],
       ['cy', 990, 10, 'active'],
     ]);
+  });
+
+  describe('last moves', () => {
+    const moves = (table) =>
+      Object.fromEntries(publicState(table).seats.map((s) => [s.playerId, s.lastAction]));
+
+    it('are empty at the start of a hand: the blinds are not moves', () => {
+      expect(moves(started())).toEqual({ ana: null, ben: null, cy: null });
+    });
+
+    it('show what each player did in the current betting round', () => {
+      const table = play(
+        started(),
+        ['ana', { action: 'raise', amount: 30 }],
+        ['ben', { action: 'call' }],
+      );
+      expect(moves(table)).toEqual({
+        ana: { type: 'raise', amount: 30, to: 30 },
+        ben: { type: 'call', amount: 25, to: 30 },
+        cy: null,
+      });
+      const folded = play(table, ['cy', { action: 'fold' }]);
+      expect(publicState(folded).seats.find((s) => s.playerId === 'cy').status).toBe('folded');
+    });
+
+    it('start again from nothing in the next betting round', () => {
+      const table = play(
+        started(),
+        ['ana', { action: 'call' }],
+        ['ben', { action: 'call' }],
+        ['cy', { action: 'check' }],
+      );
+      expect(publicState(table).stage).toBe('flop');
+      expect(moves(table)).toEqual({ ana: null, ben: null, cy: null });
+      const checked = play(table, ['ben', { action: 'check' }]);
+      expect(moves(checked).ben).toEqual({ type: 'check', amount: 0, to: 0 });
+    });
+
+    it('keep the last round when the hand is over', () => {
+      const table = play(started(), ['ana', { action: 'fold' }], ['ben', { action: 'fold' }]);
+      const state = publicState(table);
+      expect(state.stage).toBe('complete');
+      expect(moves(table).ana).toEqual({ type: 'fold', amount: 0, to: 0 });
+      expect(moves(table).ben).toEqual({ type: 'fold', amount: 0, to: 5 });
+    });
+
+    it('show an all-in', () => {
+      const table = play(started(), ['ana', { action: 'allin' }]);
+      expect(moves(table).ana).toEqual({ type: 'allIn', amount: 1000, to: 1000 });
+    });
   });
 
   it('never contains hole cards during a hand', () => {

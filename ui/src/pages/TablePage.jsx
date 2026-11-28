@@ -81,6 +81,8 @@ export function TablePage() {
   const { playerId, player, startOver } = usePlayer();
   const [table, setTable] = useState(null);
   const [returning, setReturning] = useState(false);
+  const [dealing, setDealing] = useState(false); // changing how hands are dealt, or asking for one
+  const [dealError, setDealError] = useState(null);
   const [returnError, setReturnError] = useState(null);
   const [problem, setProblem] = useState(null); // notFound | notSeated | unavailable
 
@@ -184,6 +186,22 @@ export function TablePage() {
     }
   }
 
+  // With "manual" on, the next hand waits until someone presses Next hand.
+  const manual = live?.autoNext === false;
+  const canDeal = manual && !inHand && !outOfPlayers && !live?.paused;
+
+  async function changeDealing(work) {
+    setDealing(true);
+    setDealError(null);
+    try {
+      await work();
+    } catch (err) {
+      if (isPlayerGone(err)) return startOver();
+      setDealError(err instanceof ApiError ? err.message : 'Tables unavailable');
+    }
+    setDealing(false);
+  }
+
   if (live?.paused && !inHand) return <Navigate to={`/tables/${code}`} replace />;
 
   const blinds = inHand ? blindPlayers(state?.seats, state?.dealer) : {};
@@ -225,6 +243,21 @@ export function TablePage() {
               <Icon name={video.micOn ? 'mic' : 'micOff'} />
             </button>
           )}
+          {isHost && live && (
+            <Button
+              variant="outline"
+              aria-pressed={manual}
+              disabled={dealing}
+              title={
+                manual
+                  ? 'Hands wait until a player presses Next hand. Click to deal them by themselves.'
+                  : 'Hands are dealt by themselves. Click to wait for Next hand instead.'
+              }
+              onClick={() => changeDealing(() => gameApi.setAutoDeal(code, playerId, manual))}
+            >
+              {manual ? 'Next hand: manual' : 'Next hand: automatic'}
+            </Button>
+          )}
           {isHost && (
             <Button
               variant={outOfPlayers ? 'lime' : 'outline'}
@@ -253,6 +286,12 @@ export function TablePage() {
           {live?.paused && inHand && (
             <div className="banner" role="status">
               Everyone will return to the table lobby after this hand.
+            </div>
+          )}
+
+          {dealError && (
+            <div className="banner" role="alert">
+              {dealError}
             </div>
           )}
 
@@ -293,8 +332,19 @@ export function TablePage() {
                   <p className="felt__waiting">
                     {state && state.seats.length < 2
                       ? 'Waiting for at least 2 players'
-                      : 'The next hand starts soon'}
+                      : manual
+                        ? 'Press Next hand when you are ready'
+                        : 'The next hand starts soon'}
                   </p>
+                )}
+                {canDeal && state && state.seats.length >= 2 && (
+                  <Button
+                    variant="lime"
+                    disabled={dealing}
+                    onClick={() => changeDealing(() => gameApi.nextHand(code, playerId))}
+                  >
+                    Next hand
+                  </Button>
                 )}
               </div>
 

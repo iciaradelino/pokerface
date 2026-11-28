@@ -75,6 +75,7 @@ export function createLiveTables({
     const entry = {
       id,
       paused: stored.paused,
+      autoNext: true, // not stored: a restart goes back to dealing by itself
       game: restoreEngineTable(stored, lastHandNumber),
       savedHandNumber: lastHandNumber,
       pendingHandId: null,
@@ -90,6 +91,7 @@ export function createLiveTables({
   function scheduleNextHand(entry) {
     const ready =
       !entry.paused &&
+      entry.autoNext &&
       !entry.nextHandTimer &&
       !entry.retryTimer &&
       !isHandInProgress(entry.game) &&
@@ -141,7 +143,11 @@ export function createLiveTables({
 
   // What the players see: the "state" message for everyone and the "private" one for a player.
   const timerEndsAt = (entry) => entry.turn?.endsAt ?? null;
-  const stateOptions = (entry) => ({ timerEndsAt: timerEndsAt(entry), paused: entry.paused });
+  const stateOptions = (entry) => ({
+    timerEndsAt: timerEndsAt(entry),
+    paused: entry.paused,
+    autoNext: entry.autoNext,
+  });
   const stateOf = (entry) => publicState(entry.game, stateOptions(entry));
 
   // Called after every change to the engine state: tells the listeners (the WebSocket), saves a
@@ -285,6 +291,46 @@ export function createLiveTables({
         }
         await afterChange(entry);
         return true;
+      }),
+
+    /**
+     * Turns dealing the next hand by itself on or off. Off: when a hand ends nothing happens until
+     * a seated player asks for the next one (dealNext). Kept in memory only, like a hand in
+     * progress, so a restart goes back to on.
+     */
+    setAutoNext: (id, autoNext) =>
+      run(id, async () => {
+        const entry = await load(id);
+        if (!entry) return false;
+        entry.autoNext = autoNext;
+        if (!autoNext) {
+          clearTimeout(entry.nextHandTimer);
+          entry.nextHandTimer = null;
+        }
+        await afterChange(entry);
+        return true;
+      }),
+
+    /**
+     * A seated player asks for the next hand right now. Statuses: 'started' | 'not_found' |
+     * 'not_seated' | 'hand_in_progress' | 'not_ready' (the table is paused, the last hand is not
+     * saved yet, or fewer than two players have chips).
+     */
+    dealNext: (id, playerId) =>
+      run(id, async () => {
+        const entry = await load(id);
+        if (!entry) return { status: 'not_found' };
+        if (!entry.game.seats.some((seat) => seat?.id === playerId)) {
+          return { status: 'not_seated' };
+        }
+        if (isHandInProgress(entry.game)) return { status: 'hand_in_progress' };
+        if (entry.paused || unsaved(entry) || playable(entry.game) < 2) {
+          return { status: 'not_ready' };
+        }
+        clearTimeout(entry.nextHandTimer);
+        entry.nextHandTimer = null;
+        await startHand(entry);
+        return { status: 'started' };
       }),
 
     /**
