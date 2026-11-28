@@ -88,12 +88,13 @@ Player as returned by the API:
 
 Database `game`, owned by `services/game/`. Owner: Lara.
 
-> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql` and `hand_players.rejected_at` added by `004_result_rejected.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
+> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql`, `hand_players.rejected_at` added by `004_result_rejected.sql` and `table_kicks` added by `005_table_kicks.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
 
 ```mermaid
 erDiagram
     tables ||--o{ seats : "has"
     tables ||--o{ hands : "plays"
+    tables ||--o{ table_kicks : "removed"
     hands ||--|{ hand_players : "pays"
     tables {
         char id PK
@@ -126,6 +127,12 @@ erDiagram
         int delta
         datetime2 sent_at
         datetime2 rejected_at
+    }
+    table_kicks {
+        char table_id PK, FK
+        uniqueidentifier player_id PK
+        nvarchar player_name
+        datetime2 kicked_at
     }
 ```
 
@@ -184,6 +191,19 @@ One row per player per finished hand.
 
 The primary key is (`hand_id`, `player_id`). Each row is one call to `POST /players/:id/results { handId, delta }`. A filtered index (`IX_hand_players_unsent`) finds the rows whose `sent_at` is still `NULL`, so they can be sent again quickly.
 
+### `table_kicks`
+
+Players the creator removed from a table, who cannot join it again until the creator lets them back in.
+
+| Column | Type | Notes |
+|---|---|---|
+| `table_id` | `CHAR(6)` | Foreign key to `tables.id`. |
+| `player_id` | `UNIQUEIDENTIFIER` | Player id from the players service. |
+| `player_name` | `NVARCHAR(30)` | Copied from the seat, so the creator sees who they removed. |
+| `kicked_at` | `DATETIME2` | UTC. |
+
+The primary key is (`table_id`, `player_id`).
+
 ### Rules
 
 - **No foreign keys to `players`.** Each service owns its database, so `player_id` is checked by calling `GET /players/:id` when the player joins, not by the database. The name is copied into `seats` so a table keeps working if the players service goes down.
@@ -193,4 +213,5 @@ The primary key is (`hand_id`, `player_id`). Each row is one call to `POST /play
 - **Sending results.** After saving a hand, the game service sends each `hand_players` row to the players service and sets `sent_at` when it succeeds. Rows that failed because the players service was down, timed out or returned a 5xx keep `sent_at` as `NULL` and are sent again after the next hand, or within a minute at the latest, so they arrive even if no other hand is played. A `404` means the player deleted their profile, so the row is marked as sent and not retried. The players service ignores a `handId` it has already saved for that player, so a retry never counts twice.
 - **Chip limit per table.** A table never holds more than 1,000,000,000 chips in total: `starting_stack × max_seats` must stay within it when the table is created, and a player cannot join if their starting stack would take the table's total over it. Nobody can win more than everyone else at the table has, so no hand result can exceed the players service's limit on `delta` (±1,000,000,000), and every stack fits in an `INT`.
 - **Results refused for good.** If the players service answers a result with a 4xx other than `404` (for example, a `delta` outside its limits), the row gets `rejected_at`, is logged as `result_rejected` and is not sent again, so it cannot hold up the results behind it.
-- **Deleting a table** also deletes its seats, its hands and their `hand_players` rows. It is refused while a hand is being played or has not been saved yet, and while any of its results has not reached the players service (neither sent nor rejected), so deleting a table never loses chips.
+- **Removing a player.** Only the creator can remove a player (`POST /tables/:id/kick`). It works like Leave for that player: folded if a hand is being played, with the seat freed when it ends. A `table_kicks` row stops them from joining again (`403 KICKED`) until the creator lets them back in (`POST /tables/:id/readmit`), which deletes the row.
+- **Deleting a table** also deletes its seats, its hands with their `hand_players` rows, and its `table_kicks` rows. It is refused while a hand is being played or has not been saved yet, and while any of its results has not reached the players service (neither sent nor rejected), so deleting a table never loses chips.

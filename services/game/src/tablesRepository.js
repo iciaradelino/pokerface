@@ -6,7 +6,7 @@ import { MAX_CHIPS_PER_TABLE } from './validation.js';
 const MAX_CODE_ATTEMPTS = 5;
 const UNIQUE_VIOLATION = 2627;
 
-function toTable(row, seatRows) {
+function toTable(row, seatRows, kickRows = []) {
   return {
     id: row.id,
     smallBlind: row.small_blind,
@@ -21,6 +21,10 @@ function toTable(row, seatRows) {
       playerId: seat.player_id.toLowerCase(),
       name: seat.player_name,
       stack: seat.stack,
+    })),
+    kicked: kickRows.map((kick) => ({
+      playerId: kick.player_id.toLowerCase(),
+      name: kick.player_name,
     })),
   };
 }
@@ -48,7 +52,10 @@ export function createTablesRepository(pool) {
     const seats = await pool.request().input('id', sql.Char(6), id)
       .query(`SELECT seat_index, player_id, player_name, stack
               FROM dbo.seats WHERE table_id = @id ORDER BY seat_index`);
-    return toTable(tables.recordset[0], seats.recordset);
+    const kicks = await pool.request().input('id', sql.Char(6), id)
+      .query(`SELECT player_id, player_name FROM dbo.table_kicks
+              WHERE table_id = @id ORDER BY kicked_at`);
+    return toTable(tables.recordset[0], seats.recordset, kicks.recordset);
   }
 
   return {
@@ -89,10 +96,11 @@ export function createTablesRepository(pool) {
     },
 
     // Seats the player at the first free seat. The table row is locked, so two players
-    // joining at the same time cannot get the same seat. Refuses a player whose starting stack
-    // would take the table over MAX_CHIPS_PER_TABLE.
+    // joining at the same time cannot get the same seat. Refuses a player the creator removed
+    // (until they are let back in) and a player whose starting stack would take the table over
+    // MAX_CHIPS_PER_TABLE.
     // Returns { status: 'joined' | 'already_seated', seatIndex }, or { status: 'full' |
-    // 'chip_limit' | 'not_found' }.
+    // 'chip_limit' | 'kicked' | 'not_found' }.
     async joinTable(id, { playerId, playerName }) {
       return inTransaction(pool, async (transaction) => {
         const tables = await transaction.request().input('id', sql.Char(6), id)
@@ -107,6 +115,15 @@ export function createTablesRepository(pool) {
           .query('SELECT seat_index, player_id, stack FROM dbo.seats WHERE table_id = @id');
         const mine = seats.recordset.find((seat) => seat.player_id.toLowerCase() === playerId);
         if (mine) return { status: 'already_seated', seatIndex: mine.seat_index };
+
+        const kicked = await transaction
+          .request()
+          .input('id', sql.Char(6), id)
+          .input('playerId', sql.UniqueIdentifier, playerId)
+          .query(
+            'SELECT 1 AS kicked FROM dbo.table_kicks WHERE table_id = @id AND player_id = @playerId',
+          );
+        if (kicked.recordset.length) return { status: 'kicked' };
 
         const taken = new Set(seats.recordset.map((seat) => seat.seat_index));
         let seatIndex = 0;
@@ -216,6 +233,28 @@ export function createTablesRepository(pool) {
                   WHERE h.table_id = @id AND r.sent_at IS NULL AND r.rejected_at IS NULL
                 ) THEN 1 ELSE 0 END AS pending`);
       return result.recordset[0].pending === 1;
+    },
+
+    /** Records that the creator removed this player, so they cannot join again. */
+    async kickPlayer(id, { playerId, playerName }) {
+      await pool
+        .request()
+        .input('id', sql.Char(6), id)
+        .input('playerId', sql.UniqueIdentifier, playerId)
+        .input('name', sql.NVarChar(30), playerName)
+        .query(`IF NOT EXISTS (SELECT 1 FROM dbo.table_kicks WHERE table_id = @id AND player_id = @playerId)
+                  INSERT INTO dbo.table_kicks (table_id, player_id, player_name)
+                  VALUES (@id, @playerId, @name)`);
+    },
+
+    /** Lets a removed player join again. Returns false if they were not removed. */
+    async readmitPlayer(id, playerId) {
+      const result = await pool
+        .request()
+        .input('id', sql.Char(6), id)
+        .input('playerId', sql.UniqueIdentifier, playerId)
+        .query('DELETE FROM dbo.table_kicks WHERE table_id = @id AND player_id = @playerId');
+      return result.rowsAffected[0] > 0;
     },
 
     /** Frees a seat. Returns false if the player was not seated there. */

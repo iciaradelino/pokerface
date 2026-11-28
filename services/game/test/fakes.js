@@ -32,6 +32,7 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
         seats: [
           { seatIndex: 0, playerId: createdBy, name: creatorName, stack: settings.startingStack },
         ],
+        kicked: [],
       };
       rows.set(id, table);
       return copy(table);
@@ -41,6 +42,7 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
       if (!table) return { status: 'not_found' };
       const mine = table.seats.find((seat) => seat.playerId === playerId);
       if (mine) return { status: 'already_seated', seatIndex: mine.seatIndex };
+      if (table.kicked.some((kick) => kick.playerId === playerId)) return { status: 'kicked' };
       const taken = new Set(table.seats.map((seat) => seat.seatIndex));
       let seatIndex = 0;
       while (seatIndex < table.maxSeats && taken.has(seatIndex)) seatIndex++;
@@ -86,6 +88,18 @@ export function fakeTablesRepository({ newTablesPaused = false } = {}) {
     async hasUnsentResults(id) {
       const tableHands = new Set(hands.filter((h) => h.tableId === id).map((h) => h.handId));
       return (await repo.getUnsentResults(Infinity)).some((r) => tableHands.has(r.handId));
+    },
+    async kickPlayer(id, { playerId, playerName }) {
+      const table = rows.get(id);
+      if (!table.kicked.some((kick) => kick.playerId === playerId)) {
+        table.kicked.push({ playerId, name: playerName });
+      }
+    },
+    async readmitPlayer(id, playerId) {
+      const table = rows.get(id);
+      const before = table.kicked.length;
+      table.kicked = table.kicked.filter((kick) => kick.playerId !== playerId);
+      return table.kicked.length < before;
     },
     async removeSeat(id, playerId) {
       const table = rows.get(id);
