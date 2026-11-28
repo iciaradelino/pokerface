@@ -408,3 +408,78 @@ describe('robustness', () => {
     live.get = realGet;
   });
 });
+
+describe('players who disconnect', () => {
+  const GRACE = 150;
+
+  beforeEach(() => {
+    sockets.close();
+    sockets = attachTableSockets({
+      server,
+      live,
+      uiOrigin: UI,
+      disconnectGraceMs: GRACE,
+      logger: (l) => logs.push(JSON.parse(l)),
+    });
+  });
+
+  const seatedIds = () => tables.rows.get('K7QX2M').seats.map((seat) => seat.playerId);
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('frees the seat of a player who closes the page and does not come back', async () => {
+    await join(ben);
+    const anaWs = connect(ana);
+    const benWs = connect(ben);
+    await until(() => last(benWs, 'private'), 'Ben connected');
+    benWs.close();
+    await until(() => !seatedIds().includes(ben), "Ben's seat to be freed");
+    await until(() => last(anaWs, 'state')?.seats.length === 1, 'Ana to see the empty seat');
+    expect(logs).toContainEqual(expect.objectContaining({ event: 'player_disconnected' }));
+  });
+
+  it('folds a player who disconnects mid-hand and frees the seat when the hand ends', async () => {
+    await join(ben);
+    const anaWs = connect(ana);
+    const benWs = connect(ben);
+    await until(() => last(anaWs, 'state')?.stage === 'preflop', 'the hand to start');
+    benWs.close();
+    await until(() => !seatedIds().includes(ben), "Ben's seat to be freed");
+    expect(tables.hands).toHaveLength(1); // Ben folded, so Ana won the hand and it was saved.
+  });
+
+  it('keeps the seat of a player who reloads the page', async () => {
+    await join(ben);
+    const first = connect(ben);
+    await until(() => last(first, 'private'), 'Ben connected');
+    first.close();
+    await first.closed;
+    const second = connect(ben); // The reload reconnects well within the grace period.
+    await until(() => last(second, 'private'), 'Ben reconnected');
+    await wait(GRACE * 2);
+    expect(seatedIds()).toContain(ben);
+  });
+
+  it('keeps the seat while the player still has another tab open', async () => {
+    await join(ben);
+    const tab1 = connect(ben);
+    const tab2 = connect(ben);
+    await until(() => last(tab1, 'private') && last(tab2, 'private'), 'both tabs connected');
+    tab1.close();
+    await wait(GRACE * 2);
+    expect(seatedIds()).toContain(ben);
+  });
+
+  it('does nothing more for a player who pressed Leave, or when the table is deleted', async () => {
+    await join(ben);
+    const benWs = connect(ben);
+    await until(() => last(benWs, 'private'), 'Ben connected');
+    await request(server).post('/tables/K7QX2M/leave').send({ playerId: ben });
+    await benWs.closed;
+    const anaWs = connect(ana);
+    await until(() => last(anaWs, 'private'), 'Ana connected');
+    await request(server).delete('/tables/K7QX2M').query({ playerId: ana });
+    await anaWs.closed;
+    await wait(GRACE * 2);
+    expect(logs.filter((l) => l.event.startsWith('player_disconnect'))).toEqual([]);
+  });
+});
