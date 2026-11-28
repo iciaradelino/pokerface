@@ -88,7 +88,7 @@ Player as returned by the API:
 
 Database `game`, owned by `services/game/`. Owner: Lara.
 
-> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql`, `hand_players.rejected_at` added by `004_result_rejected.sql` and `table_kicks` added by `005_table_kicks.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
+> The tables below are created by `services/game/migrations/002_tables.sql`, plus the `paused` column added by `003_table_paused.sql`, `hand_players.rejected_at` added by `004_result_rejected.sql`, `table_kicks` added by `005_table_kicks.sql` and the `turn_seconds` column added by `006_table_turn_seconds.sql`. `health_checks` comes from `001_health.sql` and is only used by `/health`.
 
 ```mermaid
 erDiagram
@@ -102,6 +102,7 @@ erDiagram
         int big_blind
         int starting_stack
         tinyint max_seats
+        smallint turn_seconds
         bit paused
         uniqueidentifier created_by
         datetime2 created_at
@@ -146,6 +147,7 @@ One row per private table. The settings use the same rules as the poker engine, 
 | `small_blind`, `big_blind` | `INT` | Default 5 and 10. Positive, small blind not above the big blind. |
 | `starting_stack` | `INT` | Chips a player gets when they first sit down. Default 1000, at least one big blind, and `starting_stack × max_seats` at most 1,000,000,000 (see the chip limit below). |
 | `max_seats` | `TINYINT` | 2 to 6, default 6. |
+| `turn_seconds` | `SMALLINT` | Seconds each player has to act, chosen when the table is created. 15 to 300, default 120. When it runs out the player checks if they can, otherwise folds. |
 | `paused` | `BIT` | 1 while the table waits for its creator to press "Start game", or after they pause it: the hand being played finishes but no new hand starts. New tables are created with 1; starting or resuming sets it to 0. |
 | `created_by` | `UNIQUEIDENTIFIER` | Player id from the players service. |
 | `created_at` | `DATETIME2` | UTC. |

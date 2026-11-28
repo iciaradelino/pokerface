@@ -15,7 +15,7 @@ import { restoreEngineTable } from './engineRestore.js';
 
 export const HAND_PAUSE_MS = 5000;
 export const SAVE_RETRY_MS = 3000;
-export const TURN_MS = 120_000;
+export const TURN_MS = 120_000; // For tables saved without their own turn time.
 
 /**
  * The tables being played, kept in memory with their poker engine state (max 1 replica, so one
@@ -32,14 +32,15 @@ export const TURN_MS = 120_000;
  *   remove: 'deleted' | 'hand_in_progress' | 'results_pending' | 'not_found'
  *   act:    'ok' (+ state, private) | 'not_found'; a rule violation throws the engine's EngineError
  *
- * Each player has `turnMs` to act. When the time runs out the engine checks for them if it can,
- * otherwise folds them, so a player who walks away never blocks the table.
+ * Each player has the table's turn time (`turnSeconds`, chosen when it was created) to act. When
+ * the time runs out the engine checks for them if it can, otherwise folds them, so a player who
+ * walks away never blocks the table. Tests can set `turnMs` to use one time for every table.
  */
 export function createLiveTables({
   tables,
   handPauseMs = HAND_PAUSE_MS,
   saveRetryMs = SAVE_RETRY_MS,
-  turnMs = TURN_MS,
+  turnMs = null,
   generateHandId = randomUUID,
   dealOptions = () => ({}),
   onChange = () => {},
@@ -81,6 +82,7 @@ export function createLiveTables({
       pendingHandId: null,
       nextHandTimer: null,
       retryTimer: null,
+      turnMs: turnMs ?? (stored.turnSeconds ? stored.turnSeconds * 1000 : TURN_MS),
       turn: null, // { handNumber, playerId, endsAt, timer } for the player whose turn it is
     };
     live.set(id, entry);
@@ -124,11 +126,11 @@ export function createLiveTables({
     if (playerId === null) return;
     const timer = setTimeout(() => {
       run(entry.id, () => timeOut(entry, handNumber, playerId)).catch(() => {});
-    }, turnMs);
+    }, entry.turnMs);
     entry.turn = {
       handNumber,
       playerId,
-      endsAt: new Date(Date.now() + turnMs).toISOString(),
+      endsAt: new Date(Date.now() + entry.turnMs).toISOString(),
       timer,
     };
   }

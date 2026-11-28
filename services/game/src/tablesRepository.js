@@ -13,6 +13,7 @@ function toTable(row, seatRows, kickRows = []) {
     bigBlind: row.big_blind,
     startingStack: row.starting_stack,
     maxSeats: row.max_seats,
+    turnSeconds: row.turn_seconds,
     paused: row.paused,
     createdBy: row.created_by.toLowerCase(),
     createdAt: row.created_at.toISOString(),
@@ -46,7 +47,7 @@ async function inTransaction(pool, work) {
 export function createTablesRepository(pool) {
   async function getTable(id) {
     const tables = await pool.request().input('id', sql.Char(6), id)
-      .query(`SELECT id, small_blind, big_blind, starting_stack, max_seats, paused, created_by, created_at
+      .query(`SELECT id, small_blind, big_blind, starting_stack, max_seats, turn_seconds, paused, created_by, created_at
               FROM dbo.tables WHERE id = @id`);
     if (!tables.recordset[0]) return null;
     const seats = await pool.request().input('id', sql.Char(6), id)
@@ -75,9 +76,10 @@ export function createTablesRepository(pool) {
               .input('bigBlind', sql.Int, settings.bigBlind)
               .input('startingStack', sql.Int, settings.startingStack)
               .input('maxSeats', sql.TinyInt, settings.maxSeats)
+              .input('turnSeconds', sql.SmallInt, settings.turnSeconds)
               .input('createdBy', sql.UniqueIdentifier, createdBy)
-              .query(`INSERT INTO dbo.tables (id, small_blind, big_blind, starting_stack, max_seats, created_by, paused)
-                      VALUES (@id, @smallBlind, @bigBlind, @startingStack, @maxSeats, @createdBy, 1)`);
+              .query(`INSERT INTO dbo.tables (id, small_blind, big_blind, starting_stack, max_seats, turn_seconds, created_by, paused)
+                      VALUES (@id, @smallBlind, @bigBlind, @startingStack, @maxSeats, @turnSeconds, @createdBy, 1)`);
             await transaction
               .request()
               .input('id', sql.Char(6), id)

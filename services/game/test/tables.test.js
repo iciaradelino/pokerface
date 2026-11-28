@@ -266,3 +266,23 @@ describe('unknown routes', () => {
     expect(response.body).toEqual({ message: 'Not found', code: 'NOT_FOUND' });
   });
 });
+
+describe('the turn time chosen when creating a table', () => {
+  it('defaults to 120 seconds and keeps a custom value', async () => {
+    expect((await createTable()).body.turnSeconds).toBe(120);
+    const custom = await createTable({ playerId: ana, turnSeconds: 30 });
+    expect(custom.status).toBe(201);
+    expect(custom.body.turnSeconds).toBe(30);
+  });
+
+  it.each([15, 300])('accepts %i seconds', async (turnSeconds) => {
+    expect((await createTable({ playerId: ana, turnSeconds })).status).toBe(201);
+  });
+
+  it.each([14, 301, 30.5, '60', null])('rejects %j with 400', async (turnSeconds) => {
+    const response = await createTable({ playerId: ana, turnSeconds });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('turnSeconds');
+    expect(tables.rows.size).toBe(0);
+  });
+});
